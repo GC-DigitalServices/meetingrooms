@@ -1,0 +1,16 @@
+# Group configuration for the Room Booking Platform.
+#
+# Replace the placeholder UUIDs with real Entra ID group object IDs.
+# Find them in: Azure portal → Entra ID → Groups → [group] → Object ID
+#
+# staff_groups: any user in at least one of these groups is treated as
+#   "staff" and sees full booking detail for staff-organised meetings.
+#
+# admin_group: members of this group are platform admins — they can
+#   book any room, pair/revoke iPads, view the audit log, and revoke
+#   user sessions.
+
+staff_groups:
+  - "00000000-0000-0000-0000-aaaaaaaaaaaa" # All Staff — replace with real group ID
+
+admin_group: "00000000-0000-0000-0000-cccccccccccc" # Room Booking Admins — replace with real group ID

@@ -1,0 +1,145 @@
+PHASE 4 — REAL-TIME BROADCAST LAYER
+====================================
+
+Goal
+----
+Build the push-update pipeline so any booking change — whether
+originating from our API or from the webhook handler — reaches every
+connected client within a second or two. This phase adds no UI, but
+stands up the layer phases 5 and 6 depend on.
+
+Duration estimate
+-----------------
+~3 to 5 days.
+
+
+Prerequisites
+-------------
+- Phases 1 through 3 complete.
+
+
+Architectural note
+------------------
+We run one application instance. Socket.IO is in-process; there is
+no Redis pub/sub fan-out between instances. If we ever need multiple
+instances, adding @socket.io/redis-adapter is a small change and the
+publisher API in lib/realtime/publish.ts is designed to make it
+transparent — but we are deliberately not pre-building for it.
+
+
+Work items
+----------
+1. Socket.IO server
+   - Embedded in a custom Next.js server (server.ts) running under
+     Node runtime. Not Edge. Not middleware.
+   - Endpoint path /ws, CORS locked to the portal and iPad origins.
+   - Authentication at handshake:
+     * Portal clients: present the session cookie; server resolves
+       to a UPN and the user's permitted rooms.
+     * iPad clients: present Authorization: Bearer <device-token>;
+       server resolves to a device, its room, and its scope.
+   - Unauthenticated handshakes are rejected.
+
+2. Channel model
+   - Each room has a logical channel room:<roomId>.
+   - Section events fan out to BOTH room:<sectionId> AND
+     room:<parentCompositeId>.
+   - Portal clients can subscribe/unsubscribe via
+     { type: "subscribe",   roomIds: [...] }
+     { type: "unsubscribe", roomIds: [...] }
+     Capped at 50 rooms per client. Server enforces visibility:
+     a non-staff user subscribing to a room they can't see is
+     rejected.
+   - iPad clients are auto-subscribed at handshake:
+     * STANDARD / SECTION scope → one channel (its room).
+     * COMPOSITE scope → composite + all its sections.
+
+3. Publisher API
+   - lib/realtime/publish.ts exposes:
+       publishBookingCreated(booking)
+       publishBookingUpdated(booking)
+       publishBookingDeleted(roomId, graphEventId, parentId?)
+       publishRoomUpdated(room)
+   - Internally resolves channels to publish to (one or two,
+     depending on whether the room is a SECTION).
+   - Wire the booking service (phase 3) and the webhook handler
+     (phase 2) to call these at the correct points.
+
+4. Message envelope
+   - { id, type, at, payload }
+   - id lets clients dedupe across overlapping channels (a section
+     event arrives on both its own channel and the parent's).
+   - at lets clients ignore out-of-order arrivals.
+
+5. Snapshot on connect/reconnect
+   - On connect, the server sends one
+     { type: "snapshot", roomId, bookings: [...] }
+     per subscribed room, covering now+48h.
+   - Snapshot is computed from Postgres cache and visibility-
+     filtered for the requesting client.
+   - Normal message stream resumes after the snapshot.
+
+6. Health signals
+   - Server emits ping every 25s.
+   - Clients that haven't received a message in 60s mark the
+     connection degraded and reconnect.
+
+7. Logging
+   - Counters via Pino: ws_connected, ws_messages_out,
+     ws_messages_in, ws_reconnects, ws_auth_failures.
+   - Log every auth failure at warn level with client ip and
+     reason.
+
+8. Test harness
+   - scripts/ws-harness.ts — CLI tool that connects as a fake
+     portal or device client and dumps messages.
+   - Integration test: create a booking via the API, assert a
+     message appears on a separately connected client within 2s.
+
+
+Testing
+-------
+- Booking-to-broadcast latency test: create a booking via the API,
+  measure time to client receipt. Target p95 < 1.5s.
+- Webhook-to-broadcast: simulate a Graph notification, measure
+  time from receipt to message delivery. Target p95 < 2s.
+- Composite fan-out: book a section, assert the message arrives
+  on both the section's channel and the composite's channel.
+- Visibility on snapshot: a student connecting to a staff-only
+  room (which they shouldn't even know exists) is rejected at
+  subscribe. A student subscribing to a "show all rooms" channel
+  for a room they can't book gets snapshots stripped of subject
+  and organiser.
+- Reconnect: kill the socket mid-session, client reconnects,
+  receives a snapshot, state converges.
+
+
+Exit criteria
+-------------
+- A booking created via the API is observed by a connected test
+  client within 2s in 95% of runs.
+- Section bookings fan out to the parent composite's channel.
+- Visibility rules are enforced on subscribe and on snapshot.
+- Reconnect-with-snapshot brings state into convergence after a
+  socket interruption.
+
+
+Risks and mitigations
+---------------------
+- Railway TLS terminates at its load balancer; WebSocket upgrades
+  pass through transparently. Mitigation: explicitly test the
+  deployed environment, not just localhost.
+- We're not building for multi-instance, but if Railway ever spins
+  a second replica during deploys (briefly), Socket.IO won't fan
+  out between them. Mitigation: configure Railway to use a single
+  replica explicitly, or document the brief deploy-time window as
+  acceptable (no message loss because of the snapshot-on-reconnect
+  path).
+
+
+Out of scope for this phase
+---------------------------
+- Offline client behaviour — that's phase 6 (iPad) and phase 5
+  (portal shows a degraded banner).
+- Message replay beyond the snapshot window.
+- Cross-instance pub/sub (deliberately deferred).

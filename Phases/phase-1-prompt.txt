@@ -1,0 +1,120 @@
+PROMPT FOR PHASE 1 — FOUNDATION AND TENANT SETUP
+=================================================
+
+Hand this to Claude (or another coding assistant) at the start of a
+fresh session where it has access to README.md, build.md, claude.md,
+and phase-1-foundation.txt.
+
+
+THE PROMPT
+----------
+
+You are helping build the Room Booking Platform. Before you do
+anything, read README.md, build.md, claude.md, and
+phase-1-foundation.txt in full. claude.md contains working rules you
+must follow; build.md is the architectural source of truth;
+phase-1-foundation.txt is the phase we are working on now.
+
+Our goal for this session is Phase 1: foundation and tenant setup.
+By the end of the phase a developer should be able to clone the repo,
+run it locally against Postgres and Redis in Docker, deploy to
+Railway, and successfully call Microsoft Graph to list events from a
+real (locked-down) room mailbox. No user-facing UI beyond a health
+check. No auth flows. No data model work beyond what's needed to boot.
+
+This system runs on Railway, not Azure. There is no Bicep, no
+Terraform, no Key Vault, no managed identity. Secrets live in
+Railway environment variables.
+
+Please proceed in this order, pausing after each step for me to
+confirm before moving on:
+
+1. Confirm understanding. Summarise in ~10 bullets what Phase 1
+   requires, what's explicitly out of scope, and any decisions you
+   think I need to make before you write code (for example: package
+   manager choice, CI provider, real tenant vs Microsoft 365
+   Developer tenant for initial work). Do not start coding yet.
+
+2. Repo scaffold. Produce the Next.js 15 project structure (App
+   Router, TypeScript, Tailwind, src/ layout, route groups (portal)
+   and (display) as empty placeholders, and the lib/ subdirectories
+   listed in claude.md). Include ESLint, Prettier, Husky,
+   lint-staged, and Vitest config. Add a docker-compose.yml for
+   local Postgres and Redis. Add a .env.example documenting every
+   variable you introduce, and a lib/config.ts that validates env
+   with zod and fails loudly on boot. Include zod-backed loaders
+   for config/rooms.yaml and config/groups.yaml even though we
+   won't populate them in this phase.
+
+3. CI pipeline. A GitHub Actions workflow that runs typecheck,
+   lint, and unit tests on every push and PR.
+
+4. Railway configuration. A railway.json (or railway.toml) at the
+   repo root defining the build command, start command, and
+   healthcheck. Document the required Railway env vars in
+   .env.example with notes on which are app-injected (DATABASE_URL,
+   REDIS_URL) and which are user-set (AZURE_*, SESSION_SECRET,
+   QR_SIGNING_KEY, PUBLIC_BASE_URL). Add /api/health that returns
+   200 when Postgres and Redis are reachable.
+
+5. Graph smoke test. scripts/graph-smoke.ts that authenticates with
+   app credentials from env vars and lists the next 7 days of events
+   for a room mailbox UPN passed as an argument. Include
+   retry/backoff on 429 and 5xx per build.md. This is the
+   exit-criterion artefact — it must work end to end against a real
+   mailbox.
+
+6. README additions. A "Getting started" section a new developer
+   can follow in 10 minutes: prerequisites, env setup,
+   `docker compose up`, `pnpm dev`, the smoke test, and a brief
+   "Deploying to Railway" section.
+
+7. Runbook. Create docs/runbooks/room-mailbox-provisioning.md with
+   the PowerShell for the Application Access Policy AND the
+   Set-CalendarProcessing lockdown, plus verification steps:
+   - In-scope room calls succeed; out-of-scope mailbox 403s
+   - A normal Outlook user inviting the room is auto-declined
+   - The app can still create events on the same mailbox
+   The lockdown is the architectural guarantee that the portal is
+   the only booking path. Get this right.
+
+Rules while you work:
+
+- Follow claude.md strictly. Exchange is the source of truth; the
+  portal is the only writer; the application credential is how we
+  *write to Exchange* but the user is the *organiser*.
+- Do not implement anything from later phases. No MSAL flow, no
+  Prisma schema beyond what's needed to connect, no booking logic,
+  no Socket.IO. If you find yourself reaching for those, stop —
+  that's Phase 2, 3, or 4.
+- Where build.md and claude.md conflict, build.md wins and flag it
+  to me so we update claude.md.
+- Flag anything the phase doc assumes (tenant admin access, test
+  room mailboxes, Railway account, DPO availability) that I haven't
+  confirmed.
+- When you need a decision from me, ask once, crisply, with a
+  recommendation and reasoning. Don't stall on trivial choices —
+  pick sensibly and note it.
+
+Start with step 1.
+
+
+NOTES ON THE PROMPT'S DESIGN
+----------------------------
+
+Reading order is pinned: README → build → claude → phase doc gives
+the assistant the right mental model: product → architecture →
+working rules → current scope.
+
+Step-by-step with pauses prevents a 2000-line monolith landing in
+one go.
+
+The mailbox lockdown is called out specifically because it's the
+single most operationally consequential thing in this phase. If it
+isn't done, every other security claim in the design is voided.
+
+The DPO conversation isn't in the coding steps because Claude can't
+do it for you — but it's in phase-1-foundation.txt work item 8 as
+something you must arrange. Doing this in phase 1 (not phase 7) is
+deliberate; we're handling student data and shouldn't surprise the
+DPO with it later.

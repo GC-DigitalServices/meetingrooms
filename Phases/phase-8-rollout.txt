@@ -1,0 +1,186 @@
+PHASE 8 — ROLLOUT
+==================
+
+Goal
+----
+Take the platform from a pilot of a few rooms to every bookable
+room in the college. For a ~20-room estate, two waves is enough.
+Hand over day-to-day operations to the IT team and establish the
+post-launch support model.
+
+Duration estimate
+-----------------
+~2 to 3 weeks, ideally not overlapping with the start of a term's
+first week.
+
+
+Prerequisites
+-------------
+- Phases 1 through 7 complete.
+- Pilot rooms from phase 6 have been running for 2+ weeks with
+  no major incidents.
+- IT team trained on the runbooks from phase 7.
+- MDM profile for iPads tested and ready to deploy at scale.
+
+
+Rollout waves
+-------------
+Wave 1 — Early adopter rooms (3-5 rooms, week 1)
+  Mix of room types: a standard meeting room, a study room
+  available to students, the composite hall (or whichever
+  partitionable room you have). Invite ~15 staff and ~10
+  students as pilot users. Daily check-ins for 3 days, then
+  every other day.
+
+Wave 2 — All remaining rooms (week 2-3)
+  All other rooms onboarded. Announce broadly via college
+  comms. Drop-in support sessions per building during the
+  first few days.
+
+If the estate ever doubles (~40 rooms), split wave 2 into a
+"half the estate" wave and a "rest" wave. For ~20 rooms this
+is unnecessary.
+
+
+Per-wave checklist
+------------------
+Before each wave, per room:
+  - Room metadata reviewed in rooms.yaml and imported.
+  - allowedGroups set correctly (and reviewed by an
+    appropriate stakeholder, e.g. CLT for staff/admin rooms).
+  - Mailbox lockdown applied (PowerShell from phase 1
+    runbook) and verified — Outlook invite is auto-declined.
+  - Application Access Policy includes the mailbox.
+  - Graph subscription created (the onboarding flow handles
+    this automatically once the room is in the database).
+  - iPad(s) provisioned via MDM: app installed, device
+    enrolled, wall-mounted, powered on. Scope selected
+    during pairing (STANDARD / SECTION / COMPOSITE).
+  - Pairing pass: pair-display flow run, verified with a
+    test booking.
+  - Wi-Fi signal checked at the mount location.
+
+During each wave:
+  - Admin dashboard watched daily by at least one engineer
+    and one IT ops person.
+  - Feedback form linked from the portal footer, triaged
+    daily.
+  - Incident log kept even for minor issues; reviewed at
+    end-of-wave retro.
+
+After each wave:
+  - Retro: what worked, what didn't, what to fix before
+    the next wave.
+  - Runbooks updated with any new incidents.
+  - Roadmap updated with genuinely requested features versus
+    nice-to-haves we can defer.
+
+
+Work items
+----------
+1. Communications plan
+   - Email to all staff before wave 1 with a short demo video
+     covering both portal and iPad.
+   - Email to all students before wave 1 explaining what they
+     can book and how (some study rooms? library rooms?).
+     This is a separate email — students don't need to hear
+     about meeting room booking processes.
+   - One-page quick reference printed and placed in each
+     staff room.
+   - FAQ on the staff intranet (and a smaller one on the
+     student intranet, scoped to what students can book).
+   - Make clear in both: room bookings are not made in
+     Outlook anymore. This is a real behaviour change for
+     staff who previously invited rooms to meetings; the
+     mailbox lockdown means those invites are now auto-
+     declined.
+
+2. Training
+   - 15-minute Teams session recorded for staff, covering
+     the portal and iPad QR flow.
+   - Shorter clip for students.
+   - Separate session for admins on device pairing, audit
+     log, allowedGroups management.
+
+3. Support model
+   - Tier 1 (IT helpdesk): basic issues, reseating iPads,
+     resetting device pairings.
+   - Tier 2 (IT operations): runbooks, Graph subscription
+     issues, allowedGroups corrections.
+   - Tier 3 (dev / vendor): code-level issues.
+   - No on-call rota at this scale. Office-hours support is
+     sufficient; out-of-hours is best-effort. Revisit if a
+     post-launch incident shows it's needed.
+
+4. SLOs published to stakeholders
+   - Portal availability: 99% during school hours.
+   - Booking-write latency: p95 < 2s during school hours.
+   - Booking-to-display propagation: < 5s during school
+     hours.
+   - iPad uptime: > 99% during school hours.
+   - Support response: 1 business day for Tier 1.
+   - These are achievable on Railway with the current
+     architecture; if they're missed, dashboards will say so
+     before users complain.
+
+5. Ongoing operations rhythm
+   - First half-term:
+     * Monday: review weekend alerts.
+     * Wednesday: check subscription health and device
+       heartbeats.
+     * Friday: triage feedback.
+   - After settling:
+     * Monthly: review retention job outputs, rotate
+       secrets if due, scan audit log for anomalies.
+
+6. Roadmap seeding (not built this phase)
+   - Recurring bookings from the portal.
+   - Catering / AV request integration.
+   - Usage analytics for facilities.
+   - Teams app surface for the mobile/Teams users.
+   - Anything wave 1 feedback genuinely demands.
+
+
+Exit criteria
+-------------
+- Every bookable room has the lockdown applied, an active
+  Graph subscription, and (where appropriate) a working iPad
+  that's been live for 7+ days.
+- SLOs are met for two consecutive weeks after wave 2
+  completes.
+- IT team owns day-to-day operations; dev team is
+  involved only for code changes and Tier 3 incidents.
+- A retro document exists and its actions are tracked.
+
+
+Risks and mitigations
+---------------------
+- Rolling out at the start of a term maximises visibility but
+  also maximises blast radius. Mitigation: do wave 1 the week
+  before term starts.
+- Staff resistance to losing the Outlook-invite workflow is
+  the biggest single risk in this rollout. We have removed
+  that option deliberately, and there's no going back without
+  unwinding the mailbox lockdown — which would undermine the
+  permission model for the rooms that need it.
+  Mitigation: communicate clearly; train well; make the
+  portal obviously better; expect a couple of weeks of
+  grumbling.
+- Student usage may be much lower than staff and that's fine;
+  we don't need to "drive adoption" for students — the
+  rooms they can book are typically optional convenience
+  bookings.
+- Hardware failures at scale. Mitigation: hold 1-2 spare
+  iPads pre-configured for swap.
+- End-of-term freeze may forbid deployments in exam periods.
+  Mitigation: plan around the academic calendar from day one.
+
+
+What "done" looks like
+----------------------
+- Staff stop asking "is the system working?" and just use it.
+- Students can find a study room and book it without
+  thinking.
+- Outlook invites to rooms get auto-declined and nobody is
+  surprised by it.
+- The dev team has moved on to the next thing.

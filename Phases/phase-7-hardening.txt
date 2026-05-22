@@ -1,0 +1,203 @@
+PHASE 7 — HARDENING
+====================
+
+Goal
+----
+Take the system from "demonstrably works" to "we're comfortable
+turning this on for real users." This phase is unglamorous — it
+closes the gaps in security, privacy, reliability, and operations
+that we've been deferring. For a 20-room system there is no need
+for pen testing or external accessibility audits unless college
+policy explicitly requires them; we do an honest internal review.
+
+Duration estimate
+-----------------
+~1 to 1.5 weeks.
+
+
+Prerequisites
+-------------
+- Phases 1 through 6 complete.
+- Pilot iPad(s) from phase 6 have been running for at least a
+  week, giving us a small amount of real usage data and ideally
+  at least one minor incident to learn from.
+
+
+Work items
+----------
+1. Security review (internal)
+   - Threat model document at docs/threat-model.md covering:
+     * Unauthorised booking creation by a non-permitted user.
+     * Device token theft.
+     * QR token forgery, replay, reuse from a photographed screen.
+     * Privilege escalation (student → staff, staff → admin).
+     * Data exfiltration from the user cache.
+     * Denial of service.
+     * Mailbox-lockdown bypass (e.g. someone re-enables
+       BookInPolicy on a room).
+   - Dependency audit via npm audit; resolve all high/critical.
+   - Review CSP headers on portal and display routes; no
+     unsafe-inline, no unsafe-eval.
+   - Secrets scan in CI (gitleaks).
+   - No external pen test for MVP scale. If college infosec
+     requires one, add it.
+
+2. Rate limiting
+   - Redis sliding window:
+     * Portal: 100 reads / user / min; 5 booking writes / user
+       / min.
+     * Device: 60 QR mints / device / hour; 100 reads / device
+       / min.
+     * Webhook endpoint: per-IP rate limit.
+   - 429 responses include Retry-After.
+   - Audit log entry for any rate-limit hit at the booking-
+     write tier.
+
+3. Error handling and resilience
+   - Consistent error envelope:
+     { error: { code, message, details? } } across all APIs.
+   - Graph-outage behaviour:
+     * Reads continue from cache.
+     * Writes return 503 with a clear message for 15 min, then
+       fail fast until recovery.
+     * Portal and iPads show a "degraded" banner.
+   - Postgres outage: 503 immediately, no silent fallbacks.
+   - Redis outage: locks fall back to per-process locks (less
+     safe, single-instance so still mostly correct); MSAL cache
+     misses force re-sign-in.
+
+4. Observability completeness
+   - Admin dashboard tile at /admin/status:
+     * Postgres / Redis / Graph reachability
+     * Subscription count and earliest expiry
+     * Webhook events in the last 24h
+     * Device heartbeats by room
+     * Recent bookings counter
+   - Email alerts to the admin DL (already wired in phase 1's
+     /api/health work) for:
+     * Subscription renewer failed twice → email immediately.
+     * Graph 5xx >10% over 15 min → email.
+     * Device heartbeat >6h during school hours → email.
+     * Nightly resync failure → email.
+
+5. Privacy and retention
+   - Privacy notice drafted with DPO sign-off:
+     * What we hold: UPN, display name, group IDs, audit
+       entries, bookings, device pairing records.
+     * Where: Railway-hosted Postgres + Redis, region per
+       Railway config.
+     * How long: bookings as long as in Exchange; audit logs
+       2 years; sessions 30 days; device records until
+       revoked.
+   - Retention job: audit entries older than 2 years are
+     archived (export to a flat file in object storage) and
+     deleted from the live table.
+   - SAR process documented: an admin tool exports a user's
+     bookings (current + historical via Exchange) and their
+     audit entries as a single JSON file.
+   - GDPR deletion path:
+     * When a user disappears from Entra (offboarded), the
+       nightly job:
+       - Replaces upn in their AuditLog rows with
+         "removed-user-<sha256>".
+       - Deletes their User row.
+       - Keeps Booking rows on rooms; replaces the cached
+         organiser name with "Former staff/student" but
+         retains the original Exchange event (which the room
+         mailbox calendar still owns).
+   - Privacy notice link in portal footer.
+
+6. Backup and recovery
+   - Postgres: Railway daily backups enabled. Document the
+     restore procedure in docs/runbooks/restore-postgres.md.
+   - Redis: no backup needed (cache only).
+   - DR posture: if the entire database is lost, the nightly
+     resync + the resync-rooms.ts script rebuild Booking from
+     Graph. Rooms/groups/devices must be re-seeded from
+     rooms.yaml / groups.yaml and re-paired.
+   - Test it: in a dev environment, destroy Postgres, restore
+     from latest backup, verify the system comes back. This is
+     a one-off check, not a recurring drill — but it must
+     happen at least once.
+
+7. Runbooks
+   - docs/runbooks/ with one markdown per incident:
+     * room-mailbox-provisioning.md (already exists from phase 1)
+     * subscription-renewer-stuck.md
+     * graph-throttling-spike.md
+     * ipad-wont-come-online.md
+     * secret-rotation.md (client secret, QR signing key,
+       device token revocation)
+     * rolling-deploy-and-rollback.md
+     * trigger-manual-resync.md
+     * restore-postgres.md
+     * mailbox-lockdown-verification.md
+       (periodic check that the BookInPolicy hasn't drifted)
+   - Each runbook: symptoms → diagnosis → resolution →
+     post-incident notes template.
+
+8. Performance
+   - Profile the booking-write path. Target p95 < 1.5s.
+   - Profile the room-grid initial render. Target LCP < 2s on
+     average staff laptop on the staff Wi-Fi.
+   - Eliminate N+1 in the room-grid (one aggregate query, not
+     per-card joins).
+   - Add database indices based on observed slow queries.
+
+9. Accessibility
+   - Internal accessibility review against WCAG 2.2 AA.
+   - axe-core in CI passing.
+   - Remediate Level A and AA findings; document any known
+     gaps with rationale.
+
+10. Legal/policy
+    - Terms of use acknowledgement on first sign-in (stored
+      in User.firstSignInAcknowledgedAt).
+    - Cookie notice (session cookie only — short and honest).
+    - Privacy notice link in footer.
+
+
+Testing
+-------
+- Chaos: kill Redis mid-booking, verify clean error surface;
+  same for Graph (via a proxy).
+- Load: simulate 100 concurrent portal users, 20 iPads, 10
+  bookings/min. System should be comfortable; if it isn't,
+  fix it.
+- Backup-restore: destroy a copy of Postgres, restore, verify
+  full recovery.
+- Subscription expiry: manually expire every subscription,
+  verify renewer catches up on next run.
+- Mailbox lockdown drift: re-enable BookInPolicy on one test
+  room, verify alert fires (work item 7's
+  mailbox-lockdown-verification runbook should be runnable as
+  a script).
+
+
+Exit criteria
+-------------
+- Threat model and internal security review documents exist.
+- Runbooks exist for every alert and every recurring failure
+  mode.
+- Dashboards show every SLO we'll commit to in phase 8.
+- DPO has signed off the privacy notice.
+- Backup/restore test passed once.
+- WCAG 2.2 AA compliance documented (with any known gaps).
+
+
+Risks and mitigations
+---------------------
+- This phase slips because it has no shiny output. Mitigation:
+  time-box it; carry any non-essential items into post-launch
+  ops.
+- DPO requires significant changes. Mitigation: the
+  conversation happened in phase 1; surprises are unlikely.
+
+
+Out of scope for this phase
+---------------------------
+- New features.
+- Pilot expansion (phase 8).
+- External pen test (skipped intentionally at this scale —
+  reconsider if college infosec requires it).
+- External accessibility audit (same).

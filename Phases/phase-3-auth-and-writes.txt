@@ -1,0 +1,288 @@
+PHASE 3 — AUTH AND BOOKING WRITES
+==================================
+
+Goal
+----
+Let staff and students sign in with their Microsoft account, and give
+them an API that can create, edit, and cancel bookings — with writes
+going to Exchange first (under application credentials) then Postgres,
+with permission enforced from Entra group membership, and with the
+composite-room write path correctly implemented. Also wire up the
+premises notification path: minibus bookings always notify premises;
+room bookings can optionally notify premises with a free-text note.
+No user-facing UI in this phase.
+
+Duration estimate
+-----------------
+~2 weeks.
+
+
+Prerequisites
+-------------
+- Phases 1 and 2 complete.
+- config/groups.yaml populated with real Entra group IDs for staff,
+  any per-room policy groups in rooms.yaml, and the admin group.
+- A dedicated noreply mailbox provisioned in the tenant for sending
+  premises notifications (e.g. rooms-noreply@college.ac.uk). The
+  Application Access Policy from phase 1 must be extended to include
+  this mailbox alongside the room mailboxes group, and the app
+  registration must be granted Mail.Send (application permission)
+  with admin consent. The premises distribution list address (e.g.
+  premises@college.ac.uk) added to config/groups.yaml as
+  premises_email.
+
+
+Work items
+----------
+1. MSAL integration
+   - Install @azure/msal-node.
+   - Server-side auth handler at /api/auth/* implementing
+     Authorization Code + PKCE.
+   - Use the delegated token exactly twice: once to call GET /me,
+     once to call GET /me/transitiveMemberOf?$select=id (paginated).
+     Then discard the token. We do not store refresh tokens because
+     all subsequent Graph calls use app credentials.
+   - Session record stored in Redis keyed by session id, contents:
+       upn, displayName, groupIds[], isStaff, isAdmin, signedInAt
+     TTL = 30 days absolute, 8h sliding.
+   - Session cookie: HTTP-only, Secure, SameSite=Lax.
+   - Middleware that decodes the cookie, loads the session from
+     Redis, and attaches it to each portal API request (or rejects
+     with 401).
+
+2. User record provisioning
+   - On every sign-in, upsert User with displayName, groupIds,
+     isStaff (membership in any staff_group), isAdmin (membership
+     in admin_group). Update lastLoginAt.
+
+3. Booking service (lib/booking/)
+   - Pure-function core for:
+     * conflict detection
+     * duration validation (snap to 15 min, reject <15 min and >8h)
+     * permission check (canUserBookRoom)
+     * visibility (canSeeRoom, canSeeBookingDetails)
+     * composite mailbox resolution (which mailboxes to invite as
+       resources given a room id)
+   - Stateful service that orchestrates the
+     check → lock → cache-check → graph-write → db-write → broadcast → audit
+     flow from build.md section 6.
+   - Error types: NotPermittedError, ConflictError, NotOrganiserError,
+     OutOfHoursError, RoomNotBookableError. HTTP mapping:
+       NotPermitted   → 403
+       Conflict       → 409
+       NotOrganiser   → 403
+       OutOfHours     → 400
+       RoomNotBookable→ 400
+
+4. Graph write integration
+   - Extend lib/graph/ with createEvent, updateEvent, deleteEvent
+     using application credentials.
+   - Event creation includes:
+     * subject = "[Organiser Name] — [User Subject]"
+     * attendees: all target mailboxes as type=resource, plus the
+       real organiser as type=required
+     * singleValueExtendedProperties:
+         OrganiserUpn = user.upn
+         Source       = "PORTAL" or "IPAD_QR"
+         BookingId    = our DB id (populated post-create)
+   - For composite-room writes, the event is created once with all
+     N section mailboxes invited as resources. There is no N-event
+     loop and no verification poll — see build.md section 6
+     rationale.
+
+5. Redis lock implementation
+   - lib/realtime/lock.ts using single-node Redlock semantics.
+   - Lock key derivation:
+       STANDARD → lock:room:<roomId>
+       SECTION  → lock:room:<parentRoomId>
+       COMPOSITE→ lock:room:<roomId>           (composite's own id)
+     i.e. always lock the "family root."
+   - Acquire with TTL=5s, retries with jitter. Release in finally.
+   - Test: parallel "book section A" and "book whole hall" attempts
+     serialise, one succeeds, other gets ConflictError.
+
+6. Write endpoints
+   - POST /api/bookings — create.
+   - PATCH /api/bookings/:id — edit, organiser-or-admin only.
+   - DELETE /api/bookings/:id — cancel, same rule.
+   - All three go through the booking service.
+
+7. Read endpoints
+   - GET /api/rooms — list rooms visible to the user (per the
+     visibility rules in build.md section 8). Includes a current
+     status snapshot per room (cache-backed).
+   - GET /api/rooms/:id/bookings?from=&to= — cache-backed, with
+     visibility-stripping applied per booking. <500ms target.
+   - GET /api/bookings/mine — bookings where organiserUpn matches
+     the current user.
+   - Cache freshness: reads come from DB; if a room's lastSyncedAt
+     is >60s stale, kick off a background refresh but still return.
+
+8. Audit log
+   - Every create / edit / cancel writes to AuditLog.
+   - For composite-room bookings, metadata includes
+     { kind: "COMPOSITE", sectionIds: [...] }.
+   - When an admin bypasses the permission check or edits someone
+     else's booking, metadata includes adminOverride: true and
+     targetOrganiserUpn.
+   - Retention policy stub documented (full retention job is
+     phase 7).
+
+9. Premises notifications
+   - Two trigger conditions:
+     * Minibus bookings (Room.kind === MINIBUS): notify on create,
+       edit, and cancel. Always. Not optional.
+     * Standard / composite / section room bookings where the
+       booker explicitly opted in by setting Booking.premisesNotes
+       to a non-empty string: notify on create, edit, and cancel.
+   - Booking input gains an optional `premisesNotes` field (string,
+     nullable, max 1000 chars). For minibuses the field is required
+     and must include destination, passenger count, and driver
+     name as structured prompts in the UI (UI is phase 5; this
+     phase enforces non-empty server-side for minibus bookings).
+   - lib/mailer/ — new module:
+       sendPremisesNotification(booking, action: "create" | "edit" | "cancel")
+     Composes an email and sends it via Microsoft Graph
+     POST /users/{premisesSenderMailbox}/sendMail using application
+     credentials. The sender mailbox UPN is read from config
+     (PREMISES_SENDER_UPN env var, e.g. rooms-noreply@college.ac.uk).
+     The recipient is config/groups.yaml's premises_email.
+   - Email content:
+     * Subject for minibus: "[ACTION] Minibus booking: {organiserName},
+       {startLocal} → {endLocal}"
+     * Subject for room: "[ACTION] Room prep requested: {roomName},
+       {startLocal}"
+     * Body: organiser, room/minibus name, start/end in local time,
+       premisesNotes verbatim, link to the booking in the portal.
+     * action = CREATE | UPDATED | CANCELLED.
+   - The send is part of the booking write path but happens AFTER
+     the audit log entry and is wrapped in its own try/catch — a
+     mail-send failure must NOT roll back the booking. On failure,
+     log at error level, write an AuditLog row with
+     action = "premises.notify.failed" and metadata containing the
+     error, and emit a structured counter premises_email_failed.
+     The booking itself stands; an admin can resend manually later
+     (resend UI is phase 5).
+   - Notification record: a small PremisesNotification table (or a
+     dedicated AuditLog action — pick one and stick with it; the
+     audit log is fine for MVP) records every send attempt with
+     bookingId, recipient, action, sentAt, status, and errorMessage
+     if any. This gives premises a paper trail when they say "we
+     never got told."
+   - Idempotency: an edit that doesn't change time, room, organiser,
+     or premisesNotes does NOT trigger a notification. Compute a
+     content hash of the notify-relevant fields; only send if the
+     hash changed since the last successful send for this booking.
+   - Rate limit: max 30 premises emails per minute system-wide
+     (defensive cap; in normal use this is nowhere near the
+     ceiling). 429 triggers a 60s queued retry.
+
+10. Authorization model
+   - User is either staff (isStaff = true) or student (isStaff = false),
+     derived from groupIds vs staff_groups in config/groups.yaml.
+   - Admin (isAdmin) is membership in admin_group. Admins can edit
+     or cancel anyone's booking and bypass permission checks
+     (audited).
+   - "Staff" doesn't grant booking permission — that comes from
+     allowedGroups per room. Staff might still not be allowed to
+     book a CLT-only room.
+
+
+Testing
+-------
+- Unit tests for lib/booking/ pure functions (high coverage):
+  permission check, visibility, mailbox resolution, conflict
+  detection.
+- Integration tests for the booking service with the Graph fake
+  and real Postgres (testcontainers in CI), covering:
+  * standard-room create, edit, cancel
+  * composite-room create, edit, cancel
+  * student attempts to book staff-only room → 403
+  * student successfully books an open room
+  * admin overrides a permission check → succeeds, audit shows
+    adminOverride
+  * parallel attempts on the same composite family serialise
+    via the lock (one wins, others see ConflictError)
+  * minibus create / edit / cancel each trigger one premises
+    notification with action=CREATE/UPDATED/CANCELLED
+  * room booking with premisesNotes set: notification fires
+  * room booking with premisesNotes null: no notification
+  * minibus booking with empty premisesNotes: rejected with 400
+  * edit that doesn't change notify-relevant fields: no
+    notification (idempotency)
+  * Graph sendMail returns 5xx: booking still persists, audit
+    row premises.notify.failed exists, counter increments
+- Manual sign-in test against the dev tenant, with one staff
+  account and one student account in the right groups.
+
+
+Exit criteria
+-------------
+- A staff user can sign in via Microsoft and create, edit, and
+  cancel bookings via the three endpoints.
+- A student user signed in to the same system can book an open
+  room and is rejected with 403 when attempting a staff-only room.
+- A composite-room booking lands as a single Graph event with N
+  resources, all auto-accepted, and a single Booking row.
+- Locking stress test passes reliably in CI: 20 parallel attempts
+  on the same composite-family slot, exactly one succeeds.
+- Audit log contains one row per booking action plus override
+  metadata where appropriate.
+- The Graph event's `subject` is "[Name] — [Subject]", the
+  organiser is a required attendee, and the OrganiserUpn extended
+  property is set.
+- A minibus booking sends a premises email on create, edit, and
+  cancel. A test booking observed end-to-end in the premises
+  inbox.
+- A room booking with the premisesNotes field populated sends one
+  email; the same booking edited with the same fields sends none.
+- A mail-send failure does not prevent the booking from being
+  created; the failure is recorded in the audit log and the
+  counter.
+
+
+Risks and mitigations
+---------------------
+- Group fetch via /me/transitiveMemberOf returns large lists for
+  students. Mitigation: paginate; use $select=id only; cap on
+  server-side at 500 group IDs (anything more is misconfigured).
+- A user's group membership changes mid-session: they don't see
+  it until next sign-in. Mitigation: an admin can revoke the
+  session from the admin UI in phase 5. For phase 3, document
+  this as expected behaviour.
+- Composite mailbox resolution is fiddly — get it wrong and either
+  the wrong sections get invited, or the conflict check misses a
+  section. Mitigation: dedicated unit tests on the pure-function
+  resolver with fixtures derived from rooms.yaml.
+- The audit log's adminOverride flag is the only record of an
+  admin booking on someone else's behalf. Make sure it's set
+  whenever the user is admin AND the action wouldn't have been
+  permitted under the standard rule.
+- Premises notifications are a side-effect that can fail (Graph
+  outage, mailbox permission drift, recipient address typo). If
+  we let mail failures roll back the booking, a transient outage
+  becomes a booking outage — far worse than missing an email.
+  Mitigation: mail send is best-effort, isolated in try/catch,
+  failures recorded in the audit log so they can be resent. The
+  phase 7 mailbox-lockdown-verification runbook should be
+  extended to confirm the noreply sender mailbox is still in the
+  Application Access Policy.
+- Notification spam if a user edits a booking repeatedly while
+  refining details. Mitigation: idempotency hash on
+  notify-relevant fields means consecutive saves with no
+  material change don't email.
+
+
+Out of scope for this phase
+---------------------------
+- Any UI (phase 5) — including the "notify premises" checkbox
+  and notes field on the booking dialog, the minibus-specific
+  booking form fields, and the admin "resend premises email"
+  action.
+- Real-time broadcast to clients (phase 4 wires the writes to
+  Socket.IO).
+- iPad device tokens and QR mints (phase 6).
+- The "find rooms I can book" helper and visibility-aware filters
+  in the UI (phase 5).
+- Daily digest emails to premises (potential phase 8+ if they
+  ask for it — per-booking notifications are MVP).

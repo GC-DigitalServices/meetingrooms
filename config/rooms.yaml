@@ -1,0 +1,51 @@
+# Room and section definitions for the Room Booking Platform.
+#
+# This file is the source of truth for room metadata. Edit via PR.
+# After merging changes, run `pnpm rooms:import` to apply them to
+# the database.
+#
+# Schema:
+#   rooms:
+#     - id           string  (stable identifier — never change after first use)
+#       mailboxUpn   string  (REQUIRED for STANDARD and SECTION rooms; OMIT for COMPOSITE)
+#       kind         "standard" | "composite"   (default: "standard")
+#       displayName  string
+#       building     string
+#       floor        string
+#       capacity     int
+#       equipment    list of strings (free-text tags, e.g. "projector", "whiteboard")
+#       bookable     bool   (default: true; set false to hide from the grid)
+#       allowedGroups list of Entra group object IDs (empty = anyone signed in can book)
+#       sections     list of section rooms (ONLY for composite rooms; otherwise omit)
+#
+# allowedGroups semantics:
+#   - Empty list: any signed-in user can book.
+#   - Non-empty list: user must be a member of at least one of the listed groups.
+
+rooms:
+
+  # -------- Cooksey --------
+  - id: "ct12"
+    mailboxUpn: "ct12@greenhead.ac.uk"
+    displayName: "CT12"
+    building: "Cooksey"
+    capacity: 12         # TODO: confirm actual capacity
+    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
+    allowedGroups: []    # empty = any signed-in user can book
+
+  # -------- Dawson --------
+  - id: "d3a"
+    mailboxUpn: "d3a@greenhead.ac.uk"
+    displayName: "D3A"
+    building: "Dawson"
+    capacity: 12         # TODO: confirm actual capacity
+    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
+    allowedGroups: []
+
+  - id: "d17"
+    mailboxUpn: "d17@greenhead.ac.uk"
+    displayName: "D17"
+    building: "Dawson"
+    capacity: 12         # TODO: confirm actual capacity
+    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
+    allowedGroups: []

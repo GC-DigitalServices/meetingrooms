@@ -1,0 +1,214 @@
+PHASE 5 — STAFF AND STUDENT PORTAL UI
+======================================
+
+Goal
+----
+Build the user-facing web portal on top of the APIs and real-time
+layer from phases 3 and 4. Staff and students sign in, see every
+room they're allowed to book (and others if they toggle "show all"),
+filter, book in a few clicks, and manage upcoming bookings. Admins
+also pair iPads, edit room metadata, and review the audit log.
+
+Duration estimate
+-----------------
+~2 to 3 weeks.
+
+
+Prerequisites
+-------------
+- Phases 1 through 4 complete.
+
+
+Design principles
+-----------------
+- Fast first paint: room grid is a server component with data
+  streamed on initial request; live updates hydrate in.
+- Booking takes three taps from the room grid in the common case
+  (click room → pick time → confirm).
+- Mobile-first. Many users will be on a phone in a corridor.
+- No modal traps. Anything started can be cancelled with Escape
+  or a clear back affordance.
+- Visibility rules enforced server-side everywhere — UI just
+  renders what it's given.
+
+
+Work items
+----------
+1. Design system
+   - Install shadcn/ui and configure Tailwind with the college's
+     brand tokens.
+   - Define semantic status tokens in globals.css:
+     --status-free, --status-busy, --status-soon.
+   - Document component usage in docs/design.md.
+
+2. Authentication UI
+   - /sign-in page with a single "Sign in with Microsoft" button.
+   - Auto-redirect: unauthenticated requests to any portal page
+     redirect to /sign-in with the intended path preserved.
+   - Account menu in the header: name, email, sign-out, link to
+     profile, and (for admins) a link to /admin.
+
+3. Room grid (/)
+   - Cards showing room name, building/floor, capacity, equipment
+     icons, and a live status pill.
+   - Filters (persistent in URL query params):
+     * Availability: free now / free for X minutes / any
+     * Capacity: ≥ N
+     * Building / floor
+     * Equipment
+   - Sort: availability first by default.
+   - Default behaviour by role:
+     * Staff: all rooms shown.
+     * Non-staff: only rooms they're permitted to book shown by
+       default. A "Show all rooms" toggle reveals the rest as
+       free/busy only, with no subject/organiser on others'
+       bookings.
+   - Composite rooms render as a single card with a small
+     per-section availability strip ("Hall: A free · B busy · C
+     free").
+   - useRoomLive subscribes to currently-visible rooms; updates as
+     filters change.
+
+4. Room detail (/rooms/[id])
+   - Header with room metadata.
+   - Timeline for today and the next 6 days, scrollable.
+   - For composite rooms, the timeline shows section lanes plus a
+     "whole room" lane. Whole-room bookings span all section
+     lanes visually but are stored once.
+   - Current-user's bookings rendered in a distinct colour with
+     edit/cancel affordances.
+   - Other users' bookings are subject to visibility rules.
+   - "Book this room" button prominent.
+   - If the user cannot book the room ("show all" mode for a
+     student), the button is replaced with a quiet "You're not
+     permitted to book this room — find rooms you can book"
+     link.
+
+5. Booking dialog
+   - Room and date pre-selected from context.
+   - For a composite room: a "What would you like to book?"
+     picker at the top — "The whole [Room]" or each section.
+     "Whole room" is disabled with a tooltip if any section
+     conflicts with the chosen window.
+   - Time pickers snap to 15-minute increments.
+   - Default duration 30 min, configurable.
+   - Live conflict preview as the user drags the time range;
+     for composite rooms, shows conflicts across all relevant
+     sections.
+   - Subject field (required, <100 chars).
+   - Submit disabled until valid; on submit, spinner up to 3s,
+     then toast confirmation and dialog closes.
+   - On NotPermittedError: stay open with a "You're not allowed
+     to book this room" message and a link to "find rooms you
+     can book."
+   - On ConflictError: stay open with an inline error; the
+     real-time update will already show the conflicting booking.
+
+6. /r/[id] route (used by iPad QR scans)
+   - Mobile-first by design.
+   - For a STANDARD or SECTION id: opens the booking dialog
+     directly with sensible pre-fills.
+   - For a COMPOSITE id (a composite-iPad scan): renders a
+     "What would you like to book?" chooser as the landing page
+     itself, then dispatches into the booking dialog.
+   - Validates the t (QR token) parameter server-side. On
+     valid + within 5 min: tags the booking with source=IPAD_QR.
+     On expired/invalid: still allows the booking but tags it
+     source=PORTAL with an audit metadata flag noting the
+     stale-token attempt.
+
+7. My bookings (/bookings)
+   - List of upcoming bookings grouped by day.
+   - Each row: room, time, subject, edit/cancel actions.
+   - Past bookings collapsed, paginated.
+
+8. Profile (/profile)
+   - Read-only: name, email, last sign-in.
+   - Link to /bookings for full history.
+
+9. Admin section (/admin, gated on isAdmin)
+   - /admin/rooms — room metadata, edit allowedGroups, bookable
+     toggle.
+   - /admin/devices — list devices by room, scope, last-seen.
+     Pair new display (includes the scope picker for composites:
+     "the whole [Room]" or pick a specific section).
+   - /admin/audit — filter by actor, date range.
+   - /admin/sessions — revoke a user's session (useful when
+     permissions changed mid-session and you don't want them
+     to wait until next sign-in).
+
+10. Real-time integration
+    - useRoomLive(roomId) manages Socket.IO subscriptions,
+      snapshot reconciliation, and state patches.
+    - For composite room views, the hook auto-subscribes to the
+      composite AND all its sections.
+    - A ConnectionBanner surfaces degraded/offline states
+      without being intrusive.
+
+11. Accessibility and polish
+    - axe-core in CI.
+    - Keyboard navigation tested through the booking flow.
+    - Loading skeletons on every async view.
+    - Error boundary at the route-group level with a useful
+      retry affordance.
+    - Visibility-stripping: the UI must never render subject or
+      organiser unless the API returned it. Don't have client-
+      side "default to Busy" logic — defaults come from the
+      server.
+
+
+Testing
+-------
+- Playwright end-to-end suite covering:
+  * Staff sign in, book a standard room, cancel it, sign out.
+  * Student sign in, see only their rooms, attempt to book a
+    staff-only room via deep link → polite rejection.
+  * Composite room booking from the dialog, with the section
+    picker; book whole room, book just one section.
+  * Two parallel tabs: booking in one appears in the other
+    within 2s.
+  * QR deep link from /r/[id] for STANDARD, SECTION, and
+    COMPOSITE ids.
+- Visual regression for the room grid and booking dialog using
+  Playwright screenshots.
+- Lighthouse on the room grid: target >90 for performance and
+  accessibility on mobile.
+
+
+Exit criteria
+-------------
+- A non-technical staff member can sign in, find a free room,
+  book it, see it in their Outlook calendar (as an attendee)
+  within 10s.
+- A student can sign in, see their bookable rooms, book one,
+  and is politely rejected when trying to book outside their
+  permitted rooms.
+- Composite rooms can be booked end-to-end from the portal,
+  both as whole-room and as section.
+- All Playwright E2E tests pass.
+- Lighthouse and axe scores meet targets.
+
+
+Risks and mitigations
+---------------------
+- Students viewing "show all rooms" still need to be unable to
+  see subject/organiser of others' bookings. Mitigation: server-
+  side stripping in the API, with unit tests covering the
+  matrix of (viewer role, organiser role, room policy).
+- Composite room timeline UI can become cluttered. Mitigation:
+  prototype with 2, 3, and 4-section composites; cap section
+  count at 4 in rooms.yaml validation.
+- Admin permission-edit UI is a footgun if misconfigured.
+  Mitigation: changes to allowedGroups require admin to confirm
+  with a "this will affect who can book this room" dialog and
+  are audited.
+
+
+Out of scope for this phase
+---------------------------
+- iPad display UI itself (phase 6).
+- The QR token issuer endpoint and the iPad's QR refresh
+  behaviour (phase 6 — the /r/[id] route lands here but the
+  iPad-side machinery is phase 6).
+- Mobile app / PWA install — leave manifest but no install
+  prompt.

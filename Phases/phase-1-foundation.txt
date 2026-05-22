@@ -1,0 +1,162 @@
+PHASE 1 — FOUNDATION AND TENANT SETUP
+=======================================
+
+Goal
+----
+Get a Next.js 15 project scaffolded, Railway infrastructure ready, and
+the Microsoft 365 tenant configured so subsequent phases have a working
+sandbox to build against. By the end of this phase a developer can
+clone the repo, run it locally, deploy to Railway, and call Microsoft
+Graph against real (locked-down) room mailboxes.
+
+Duration estimate
+-----------------
+~1 week.
+
+
+Prerequisites
+-------------
+- Access to the college's Microsoft 365 tenant with Global Admin or
+  Application Admin + Exchange Admin roles available for the app
+  registration and mailbox configuration. If not yet available, use
+  a free Microsoft 365 Developer tenant for phases 1 through 4.
+- A Railway account.
+- Agreement on the production domain (e.g. rooms.college.ac.uk).
+- DPO contact identified — see work item 8.
+
+
+Work items
+----------
+1. Repository bootstrap
+   - Create the Next.js 15 project with TypeScript, ESLint, Tailwind,
+     App Router, and the src-directory layout.
+   - Add Prettier, Husky, lint-staged, and a Vitest setup.
+   - Add a basic CI pipeline (GitHub Actions) that runs typecheck,
+     lint, and unit tests on every push.
+   - Set up branch protection on main.
+
+2. Azure app registration
+   - Register the application in Entra ID with name
+     "College Room Booking".
+   - Add redirect URIs for localhost and the future portal hostname.
+   - Add delegated permissions: User.Read, GroupMember.Read.All.
+     (These are used only at sign-in to identify the user and fetch
+     group memberships; we do not use delegated calendar permissions
+     at all.)
+   - Add application permissions: Calendars.ReadWrite.
+   - Grant admin consent.
+   - Create a client secret; record it in Railway env vars (not the
+     repo).
+
+3. Exchange Application Access Policy
+   - Create a mail-enabled security group "room-mailboxes" and add
+     two to three test rooms.
+   - Run New-ApplicationAccessPolicy to restrict our app's
+     Calendars.ReadWrite to this group.
+   - Verify by calling Graph with app auth against an in-scope room
+     (must succeed) and an out-of-scope mailbox (must 403).
+
+4. Room mailbox lockdown
+   - For each test room mailbox, run Set-CalendarProcessing with:
+       AutomateProcessing  = AutoAccept
+       AllBookInPolicy     = $false
+       BookInPolicy        = @()
+       AllRequestInPolicy  = $false
+       AllRequestOutOfPolicy = $false
+       AddOrganizerToSubject = $false
+       DeleteSubject       = $false
+       DeleteComments      = $false
+       RemovePrivateProperty = $false
+   - Verify by attempting to invite the room to a meeting from
+     Outlook as a normal user — the invite must be auto-declined.
+   - Verify our app can still create events on the same mailbox
+     via Graph using application credentials.
+   - This configuration is the architectural guarantee that the
+     portal is the only booking path. Without it, the rest of the
+     system is bypassable.
+
+5. Railway infrastructure
+   - Create a Railway project. Provision: the app service (deployed
+     from the GitHub repo), a Postgres add-on, a Redis add-on.
+   - Wire injected env vars (DATABASE_URL, REDIS_URL) into the app.
+   - Add custom env vars for: AZURE_TENANT_ID, AZURE_CLIENT_ID,
+     AZURE_CLIENT_SECRET, SESSION_SECRET, QR_SIGNING_KEY,
+     PUBLIC_BASE_URL.
+   - Custom domain pointed at the Railway service (the production
+     domain can be deferred to phase 8 if needed; a *.up.railway.app
+     URL is fine for now).
+   - Healthcheck path /api/health configured in Railway.
+
+6. Local dev environment
+   - docker-compose.yml with Postgres and Redis for local use.
+   - .env.example documenting every variable.
+   - README "Getting started" section with 10-minute setup.
+
+7. Config validation
+   - lib/config.ts exporting a zod-validated config object.
+   - Startup fails loudly if any required variable is missing or
+     malformed.
+   - YAML loaders for config/rooms.yaml and config/groups.yaml with
+     schema validation (zod).
+
+8. DPO conversation
+   - Schedule and hold an initial meeting with the college DPO.
+   - Establish: what personal data we will hold (UPN, display name,
+     group memberships, audit entries, booking history), where it
+     lives (Railway-hosted Postgres in the relevant region), how
+     long it's retained, and what the SAR / deletion process looks
+     like.
+   - Record outcomes in docs/privacy-notes.md. We will write the
+     full privacy notice in phase 7, but the DPO needs to be on
+     side from day one because we're processing student data.
+
+9. Smoke test
+   - A script scripts/graph-smoke.ts that, given app credentials,
+     lists events from a test room mailbox for the next 7 days.
+   - Commit and document.
+
+10. Runbook stub
+    - Create docs/runbooks/room-mailbox-provisioning.md with the
+      full PowerShell script for points 3 and 4, plus verification
+      steps. This runbook is operationally load-bearing — every
+      new room needs it run, correctly.
+
+
+Exit criteria
+-------------
+- CI green on main.
+- `pnpm dev` brings up the Next.js app, connects to local Postgres
+  and Redis, /api/health returns 200.
+- Railway deployment succeeds, the deployed /api/health returns 200,
+  and the deployed app can call Graph.
+- `pnpm tsx scripts/graph-smoke.ts` prints real events from a real
+  (locked-down) room mailbox.
+- Application Access Policy verified: in-scope room succeeds,
+  out-of-scope mailbox returns 403 from Graph.
+- Room mailbox lockdown verified: a non-app user cannot book the
+  room from Outlook; the app can.
+- DPO has been briefed and recorded as supportive (or any concerns
+  are logged and tracked).
+
+
+Risks and mitigations
+---------------------
+- Tenant admin access is slow to arrange. Mitigation: start with a
+  Microsoft 365 Developer tenant.
+- Application Access Policy takes up to an hour to propagate.
+  Mitigation: do this step first.
+- The mailbox lockdown could be misapplied to mailboxes that should
+  remain bookable from Outlook (i.e. mailboxes not in our system).
+  Mitigation: scope the PowerShell command precisely; the runbook
+  spells out the exact identity matching.
+- DPO has substantial concerns about student data. Mitigation: this
+  is exactly why the conversation happens in phase 1 — we have time
+  to adjust before code locks in assumptions.
+
+
+Out of scope for this phase
+---------------------------
+- Any user-facing UI beyond a health check page.
+- Authentication flows.
+- Data model beyond what's needed to boot.
+- The full privacy notice (phase 7).

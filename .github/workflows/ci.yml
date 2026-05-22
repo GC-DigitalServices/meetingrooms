@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+        env:
+          # Vitest needs these to be defined even though unit tests
+          # don't hit real services; they satisfy the zod schema if
+          # config is ever imported transitively.
+          NODE_ENV: test
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379
+          AZURE_TENANT_ID: 00000000-0000-0000-0000-000000000000
+          AZURE_CLIENT_ID: 00000000-0000-0000-0000-000000000001
+          AZURE_CLIENT_SECRET: ci-secret-placeholder
+          SESSION_SECRET: ci-session-secret-placeholder-at-least-32
+          QR_SIGNING_KEY: ci-qr-signing-key-placeholder-at-least-32
+          PUBLIC_BASE_URL: http://localhost:3000

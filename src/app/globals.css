@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------------------
+   Status colours — used on both the portal and iPad displays.
+   Never hard-code these values; always reference the CSS variable.
+   Display targets must meet WCAG 4.5:1 contrast on white and on black.
+   -------------------------------------------------------------------------*/
+:root {
+  --status-free: #16a34a;   /* green-600  */
+  --status-busy: #dc2626;   /* red-600    */
+  --status-soon: #d97706;   /* amber-600  */
+}

@@ -1,0 +1,232 @@
+PHASE 6 — iPAD ROOM DISPLAYS
+=============================
+
+Goal
+----
+Build the iPad display UI, the QR-based booking handoff into the
+portal, the device pairing flow with scope support (STANDARD,
+SECTION, COMPOSITE), and the operational pieces needed to run iPads
+as permanently-on display screens. By the end of this phase we can
+deploy iPads to pilot rooms — including a composite-room pilot —
+and have them behave correctly 24/7.
+
+Duration estimate
+-----------------
+~2 to 2.5 weeks.
+
+
+Prerequisites
+-------------
+- Phases 1 through 5 complete.
+- At least two physical iPads for testing, with an MDM solution
+  available (Jamf, Intune, or similar).
+- Wall mounts and power for at least one standard pilot room and
+  one composite pilot room (with a section's-door iPad in at
+  least one section, and ideally a main-entrance iPad too so we
+  can pilot all three scopes).
+
+
+Design note — what the iPad does
+--------------------------------
+The iPad is a display. It shows live status and a QR code. It
+never authenticates a user, never accepts typed input, and never
+writes to Graph. Bookings happen on the user's phone via the
+portal, under their MSAL session.
+
+There is no PIN, no on-screen keyboard, no shared-kiosk session,
+and no iPad-specific booking endpoint.
+
+
+Work items
+----------
+1. Display route group (app/(display)/)
+   - Single page /display.
+   - Auth via device token in a header set by the PWA wrapper.
+   - On load, reads token → device → room → scope, then renders
+     one of three layouts (work items 2 and 3).
+   - Subscribes to the right channel(s) per scope.
+
+2. STANDARD and SECTION layouts
+   - FREE: full-bleed --status-free, room name in very large
+     type, capacity below, prominent QR code, caption "Scan to
+     book this room", small next-booking preview at bottom.
+   - BUSY: --status-busy, current subject (or "Busy" if
+     organiser is non-staff or marked private), organiser name
+     (subject to visibility rules), "Until HH:MM", "Available
+     from HH:MM". QR remains present but subordinate.
+   - SOON (free but a booking starts within 15 min):
+     --status-soon, countdown, organiser name (if shown),
+     subject (if shown), QR present.
+   - Transitions cross-fade 200ms.
+   - QR ≥ 200pt square, on a white card in BUSY and SOON states.
+
+3. COMPOSITE layout
+   - The screen is divided into per-section cards (2-4 sections),
+     each showing the section's name, current status colour,
+     current/next booking summary, and "free until / busy until"
+     timing.
+   - A single prominent QR sits at the top or centre of the
+     screen, captioned "Scan to book any section or the whole
+     room."
+   - Layout adapts to section count: 2 sections = stacked top/
+     bottom; 3 = three columns or three rows; 4 = 2x2 grid.
+   - rooms.yaml validation caps section count at 4 for now.
+
+4. QR token issuer (backend)
+   - GET /api/devices/qr-token — auth'd by device token. Returns
+     { token, expiresAt }.
+   - Token = HMAC-SHA256 over { deviceId, roomId, scope, iat,
+     exp }, key from env (QR_SIGNING_KEY). 5-minute TTL.
+   - Rate-limited: 60 mints per device per hour.
+   - Key rotation: on the same schedule as the client secret
+     (every 12 months); old key valid for 24h grace.
+   - Logs: signature prefix only (first 8 chars), never the
+     full token.
+
+5. QR rendering and refresh on the iPad
+   - The display fetches a fresh token every 90s.
+   - On each fetch, regenerate the QR code locally (qrcode.js
+     or similar).
+   - QR encodes:
+     STANDARD/SECTION → /r/{roomId}?from=display&t={token}
+     COMPOSITE        → /r/{compositeRoomId}?from=display&t={token}
+   - If a fetch fails, keep showing the most recent QR for up
+     to 4 minutes (within token TTL). After that, replace with
+     "Refreshing — please book from your desk."
+
+6. The /r/[id] landing on the portal
+   - Built in app/(portal)/ in phase 5; this phase verifies the
+     end-to-end flow.
+   - For STANDARD/SECTION ids: booking dialog opens directly
+     with the section/standard room and the chosen time.
+   - For COMPOSITE ids: a chooser page renders first ("Book
+     section A / B / C / the whole Hall"), then dispatches into
+     the booking dialog.
+   - Permission check happens server-side on submit. Students
+     attempting to book a staff-only section after scanning a
+     COMPOSITE iPad see a polite rejection on the chooser page —
+     that section's button is disabled with a "Not available to
+     you" label.
+
+7. Device pairing flow (admin tool)
+   - Built in phase 5; this phase adds the scope picker UI:
+     "What does this display represent?"
+       For a STANDARD room: implicit.
+       For a SECTION: the admin picks which section.
+       For a COMPOSITE room mount (main entrance): "the whole
+         room with section chooser."
+   - Generates a 6-digit pairing code (10 min TTL).
+   - iPad enrols at /api/devices/enroll, receives a 256-bit
+     token (Argon2id-hashed at rest), stores in PWA secure
+     storage.
+   - Revoke from admin tools at any time → deletes
+     Device.tokenHash and disconnects active sockets for that
+     device.
+
+8. PWA wrapper
+   - The iPad runs the app via single-app mode in MDM.
+   - Service worker caches the display shell so brief network
+     drops don't blank the screen; shows "Reconnecting…"
+     subtle banner with last-known state visible.
+   - Screen-lock and sleep disabled via MDM profile, not app
+     code. Documented in docs/ipad-provisioning.md.
+
+9. Offline behaviour
+   - Socket disconnected >30s → small "Offline — refreshing"
+     banner.
+   - QR replaced with "Refreshing — please book from your desk"
+     after 4 minutes (the most recent QR has expired).
+   - On reconnect: snapshot reconciles, QR fetcher resumes,
+     banner clears.
+
+10. Physical provisioning checklist
+    - Hardware: iPad model, case, wall mount, cabling.
+    - Mount label with the fallback URL (e.g.
+      rooms.college.ac.uk/r/B12) for users without smartphones
+      or with cameras that don't auto-detect QR codes.
+    - MDM profile: single-app mode, disable screen lock,
+      disable volume, configure Wi-Fi, restrict URLs to our
+      domain, allow camera (for the admin-side enrolment QR
+      scan).
+    - Wi-Fi: confirm staff Wi-Fi reaches the mount location
+      — phones need it to load the portal after scanning.
+    - Power: PoE injector or nearby socket.
+    - A one-page printable setup guide in docs/ipad-setup.md.
+
+11. Telemetry
+    - iPad sends a heartbeat every 60s over the socket.
+    - Backend tracks Device.lastSeenAt.
+    - Background job device-heartbeat-check (every 15 min)
+      flags devices silent >2h; emails admins if >6h.
+    - Counter qr_token_minted per device per hour.
+    - Counter booking_via_qr per room per day.
+    - Admin dashboard tile: "Displays" with live status per
+      device, including scope.
+
+
+Testing
+-------
+- Overnight soak test: leave an iPad on /display for 72h,
+  assert zero crashes, stable memory, continuous QR rotation.
+- Power-cycle test: pull power for 60s, verify auto-return.
+- Network-loss test: disable Wi-Fi for 10 min, re-enable,
+  verify state converges and QR replaces correctly during the
+  gap.
+- QR scan reliability: scan from arm's length, iPhone and
+  Android, normal corridor lighting, against each state. All
+  must succeed within 2s.
+- QR token replay: capture, wait 6 min, attempt to use → reject.
+- QR token tamper: alter t → reject.
+- Composite scan: scan from a COMPOSITE-scoped iPad, land on
+  chooser page, book the whole room → succeeds; book just one
+  section → succeeds; for a student, the staff-only section is
+  disabled.
+- Section-scoped iPad: scan, land on the booking dialog for
+  that section only — verify there's no path to book the
+  composite from this entry point.
+- End-to-end timings: scan to confirmed booking <20s when
+  signed in, <40s on a fresh MSAL flow.
+- Accessibility: screen reader announces status correctly;
+  contrast passes in all three states; fallback URL is
+  reachable by typing on a phone.
+
+
+Exit criteria
+-------------
+- One STANDARD pilot room and one COMPOSITE pilot room have
+  mounted iPads running for a full week with no manual
+  intervention.
+- A signed-in user scanning, signing in if needed, and
+  confirming a booking takes <20s on a STANDARD or SECTION iPad,
+  <30s on a COMPOSITE iPad (extra step for the chooser).
+- A booking made via the API flips the iPad's state within 5s
+  in 95% of runs during office hours.
+- Device pairing and revocation are documented and demonstrated
+  end-to-end for all three scopes.
+
+
+Risks and mitigations
+---------------------
+- Safari kills background tabs aggressively. Mitigation: single-
+  app mode via MDM ensures we're always foreground.
+- iOS doesn't allow permanent prevention of sleep from a web
+  app alone. Mitigation: MDM profile sets auto-lock to "Never."
+- Older Android phones don't always recognise QR codes from the
+  default camera. Mitigation: printed fallback URL on every
+  mount; communicate in rollout (phase 8).
+- Staff Wi-Fi doesn't reach a basement room → phone can't load
+  the portal after scanning. Mitigation: mount checklist
+  requires confirming phone signal at install; install an
+  additional AP before deploying that iPad.
+- A composite-scoped iPad's chooser is the only place
+  whole-composite bookings happen from a corridor; if the
+  chooser UI is unclear, users will book a section instead.
+  Mitigation: usability test with a staff member who hasn't
+  seen the UI before, during the composite pilot.
+
+
+Out of scope for this phase
+---------------------------
+- Student-facing displays in non-bookable areas.
+- Permanent pairing with Teams Rooms hardware.
+- A native iOS app — the PWA shell is the deployment surface.

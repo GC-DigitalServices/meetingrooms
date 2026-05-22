@@ -1,0 +1,198 @@
+PHASE 2 — DATA LAYER AND GRAPH READ SYNC
+=========================================
+
+Goal
+----
+Establish the database schema, the Graph client, and a one-way read
+sync from Exchange room mailboxes into our Postgres cache. By the end
+of this phase our database mirrors room bookings accurately, updates
+within seconds of Outlook changes, and can survive webhook loss via a
+nightly reconciliation.
+
+Duration estimate
+-----------------
+~2 weeks.
+
+
+Prerequisites
+-------------
+- Phase 1 complete.
+- At least three test room mailboxes (including at least one
+  composite room with two sections) configured with the lockdown
+  PowerShell and added to the Application Access Policy group.
+
+
+Work items
+----------
+1. Prisma schema
+   - Translate the data model in build.md section 3 into
+     schema.prisma, including:
+     * Room with kind (STANDARD | COMPOSITE | SECTION), parentRoomId
+       self-relation, allowedGroups (String[]).
+     * Booking with graphEventId, graphICalUid (indexed).
+     * Device with scope (STANDARD | SECTION | COMPOSITE) — no
+       unique constraint on roomId (a composite can also have its
+       sections each carrying their own device).
+     * User with isStaff, isAdmin, groupIds.
+     * GraphSubscription with roomId and expiresAt indices.
+     * AuditLog with indices on at and (actor, at).
+   - Generate client, wire up to lib/db/.
+   - First migration committed.
+
+2. Room and group config
+   - config/rooms.yaml — author by hand, reviewed in PRs. Schema:
+       rooms:
+         - id: "room-b12"
+           mailboxUpn: "b12@college.ac.uk"
+           displayName: "Room B12"
+           building: "Block B"
+           floor: "1"
+           capacity: 12
+           equipment: ["projector", "whiteboard"]
+           allowedGroups: []          # empty = anyone signed in
+         - id: "hall-main"
+           kind: composite
+           displayName: "Main Hall"
+           building: "Main Building"
+           capacity: 120
+           allowedGroups: []
+           sections:
+             - id: "hall-a"
+               mailboxUpn: "hall-a@college.ac.uk"
+               displayName: "Hall A"
+               capacity: 40
+               equipment: ["projector"]
+               allowedGroups: []
+             - id: "hall-b"
+               mailboxUpn: "hall-b@college.ac.uk"
+               displayName: "Hall B"
+               capacity: 40
+               allowedGroups: []
+             - id: "hall-c"
+               mailboxUpn: "hall-c@college.ac.uk"
+               displayName: "Hall C"
+               capacity: 40
+               allowedGroups: ["<senior-staff-group-id>"]
+   - config/groups.yaml — names the staff and admin groups:
+       staff_groups:
+         - id: "<all-staff-group-id>"
+           name: "All Staff"
+         - id: "<senior-staff-group-id>"
+           name: "Senior Staff"
+       admin_group: "<room-booking-admins-group-id>"
+   - CLI: `pnpm rooms:import` reads rooms.yaml, validates with zod,
+     upserts to Room. Pulls display name from Graph as a cross-check
+     for non-composite rooms.
+
+3. Graph client module (lib/graph/)
+   - Thin wrapper around @microsoft/microsoft-graph-client.
+   - One factory function appClient() that returns a Graph client
+     authenticated with application credentials. No delegated client
+     factory in this phase — we don't need it yet (phase 3 uses
+     delegated only for /me and /me/transitiveMemberOf at sign-in).
+   - Retry with exponential backoff for 429 and 5xx responses,
+     respecting Retry-After headers.
+   - Typed response models — do not leak raw Graph types beyond this
+     module.
+   - Recorded-response fake at lib/graph/__mocks__/ for unit tests.
+
+4. Read sync (webhooks)
+   - POST /api/webhooks/graph handles both the validationToken
+     handshake and notification payloads.
+   - Validates clientState on every notification against
+     GraphSubscription.clientState.
+   - On notification, fetches the event from Graph and upserts into
+     Booking, using (graphICalUid) as the dedup key. This is
+     important for composite-room bookings, which arrive as one
+     notification per invited mailbox with the same iCalUId.
+   - The Booking row's roomId is the *logical* room: for events
+     where only one section is invited it's the section's id; where
+     multiple sections of the same composite are invited it's the
+     composite's id. The mapping is derived from the event's
+     attendee list compared against the rooms.yaml-derived data.
+   - On `changeType: deleted`, removes the row.
+   - Reads the OrganiserUpn extended property to populate
+     Booking.organiserUpn (this won't be present yet because phase 3
+     adds the writes that set it; for phase 2 we tolerate its
+     absence and use the Graph event organizer as a fallback for
+     events we didn't create).
+
+5. Subscription management (lib/graph/subscriptions.ts)
+   - createSubscriptionForRoom(roomId): subscribes to events on a
+     SECTION or STANDARD room's mailbox. Composite rooms have no
+     mailbox and no subscription.
+   - renewExpiringSubscriptions(): renews anything within 24h of
+     expiry.
+   - clientState is a random 32-byte hex.
+
+6. Full resync job
+   - scripts/resync-rooms.ts: for each room mailbox, pulls
+     calendarView for the next 60 days and reconciles against the
+     Booking table (upsert new/changed, delete missing).
+   - Wired as an in-process cron job (node-cron, nightly 02:00).
+   - Logs a summary: rooms processed, events added/changed/removed,
+     errors.
+
+7. Observability baseline
+   - Structured logging via Pino set up app-wide.
+   - Request ids propagated.
+   - Counters logged via Pino for: webhook_received,
+     webhook_validated, webhook_processed, graph_api_error,
+     resync_completed.
+
+
+Testing
+-------
+- Unit tests for lib/booking/ helpers (conflict detection, range
+  filtering, composite mailbox resolution) using fixtures — no
+  Graph calls.
+- Integration tests for the webhook handler using recorded
+  notifications and the Graph fake, including a composite-booking
+  scenario where three notifications arrive for one logical event.
+- Manual test plan in docs/testing/phase-2.md:
+  * Create an event in Outlook on a test room (since the room is
+    locked down to our app, this won't work via normal user invite
+    — instead create the event by *temporarily* relaxing the lockdown
+    or via Exchange admin tools — and then verify our sync picks
+    it up; re-lock when done. This tests the safety-net case where
+    an admin makes changes in Exchange directly).
+  * Use the smoke test from phase 1 to verify reads.
+  * Delete via Exchange admin tools — removed from DB within 10s.
+  * Stop the webhook listener for 20 min, make changes via admin
+    tools, restart, trigger resync — DB converges.
+
+
+Exit criteria
+-------------
+- Outlook round-trip (or admin-tool round-trip) demonstrated on
+  three test rooms: create, edit, cancel each propagate within 10s.
+- A composite-room event manually created in Exchange (admin
+  tooling, all sections invited as resources) appears as a single
+  Booking row keyed to the composite, not three rows.
+- Nightly resync recovers from simulated webhook loss.
+- Subscription renewer successfully renews a subscription within
+  24h of expiry.
+- CI covers the Graph wrapper with recorded-response tests and
+  passes offline.
+
+
+Risks and mitigations
+---------------------
+- Change notifications can be flaky or delayed during Graph outages.
+  Mitigation: nightly resync.
+- Event iCalUId vs id distinction is important for composite-room
+  bookings (one iCalUId, N event ids, one per invited mailbox).
+  Mitigation: explicit dedup-on-iCalUId in the webhook handler with
+  a unit test.
+- The composite-vs-section logical-room mapping in the webhook
+  handler is non-obvious — derive it from the attendee list. Don't
+  guess from the mailbox the notification arrived on.
+
+
+Out of scope for this phase
+---------------------------
+- Writing events to Graph (phase 3).
+- Sign-in flow and user/group resolution (phase 3).
+- Permission checks (phase 3).
+- Any user-facing UI beyond admin tools.
+- Real-time push to clients (phase 4).
