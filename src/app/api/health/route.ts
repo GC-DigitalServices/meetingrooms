@@ -37,7 +37,10 @@ export async function GET(): Promise<NextResponse<HealthResult>> {
   }
 
   const ok = checks.postgres && checks.redis;
-  const status = ok ? 200 : 503;
 
-  return NextResponse.json({ ok, checks, errors, at: new Date().toISOString() }, { status });
+  // Always return 200 so Railway's liveness healthcheck passes as long as the
+  // app is running. Database connectivity failures are surfaced in the response
+  // body and shown in the admin dashboard status indicator — they do not prevent
+  // the deployment from being marked healthy.
+  return NextResponse.json({ ok, checks, errors, at: new Date().toISOString() }, { status: 200 });
 }
