@@ -1,7 +1,0 @@
-# Override nixpacks install phase — pnpm-lock.yaml is not committed because
-# the dev machine cannot reach registry.npmjs.org (corporate network).
-# Railway generates the lockfile at build time.
-# TODO: generate and commit pnpm-lock.yaml once npm access is available.
-
-[phases.install]
-cmds = ["pnpm install --no-frozen-lockfile"]
