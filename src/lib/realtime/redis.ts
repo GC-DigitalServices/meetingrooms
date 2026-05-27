@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import { getConfig } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Redis client singleton.
@@ -21,7 +22,7 @@ export function getRedisClient(): Redis {
   client.on("error", (err) => {
     // Logged here so callers don't need to attach their own error handlers.
     // ioredis reconnects automatically; this prevents uncaught promise rejections.
-    console.error("[redis] connection error:", err.message);
+    logger.error({ err }, "redis: connection error");
   });
 
   if (process.env.NODE_ENV !== "production") {

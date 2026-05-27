@@ -1,6 +1,3 @@
-// Phase 1 — minimal schema, datasource and generator only.
-// The full data model is added in Phase 2.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,4 +5,120 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoomKind {
+  STANDARD
+  COMPOSITE
+  SECTION
+}
+
+enum BookingSource {
+  PORTAL
+  IPAD_QR
+}
+
+enum DeviceScope {
+  STANDARD
+  SECTION
+  COMPOSITE
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Room {
+  id           String   @id @default(cuid())
+  mailboxUpn   String?  @unique
+  displayName  String
+  building     String?
+  floor        String?
+  capacity     Int
+  equipment    String[]
+  bookable     Boolean  @default(true)
+  timezone     String   @default("Europe/London")
+
+  kind         RoomKind @default(STANDARD)
+  parentRoomId String?
+  parent       Room?    @relation("RoomSections", fields: [parentRoomId], references: [id])
+  sections     Room[]   @relation("RoomSections")
+
+  allowedGroups String[]
+
+  bookings Booking[]
+  devices  Device[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  graphEventId  String        @unique
+  graphICalUid  String
+  roomId        String
+  room          Room          @relation(fields: [roomId], references: [id])
+  organiserUpn  String
+  organiserName String
+  subject       String
+  startUtc      DateTime
+  endUtc        DateTime
+  isAllDay      Boolean       @default(false)
+  source        BookingSource
+  lastSyncedAt  DateTime      @default(now())
+
+  @@index([roomId, startUtc, endUtc])
+  @@index([graphICalUid])
+}
+
+model Device {
+  id          String      @id @default(cuid())
+  roomId      String
+  room        Room        @relation(fields: [roomId], references: [id])
+  scope       DeviceScope
+  pairingCode String?
+  tokenHash   String
+  lastSeenAt  DateTime?
+  enrolledAt  DateTime    @default(now())
+  name        String?
+
+  @@index([roomId])
+}
+
+model User {
+  upn         String    @id
+  displayName String
+  isStaff     Boolean
+  isAdmin     Boolean   @default(false)
+  groupIds    String[]
+  lastLoginAt DateTime?
+}
+
+model GraphSubscription {
+  id          String   @id
+  resource    String
+  roomId      String
+  expiresAt   DateTime
+  clientState String
+  createdAt   DateTime @default(now())
+
+  @@index([roomId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  actor    String
+  action   String
+  targetId String?
+  metadata Json
+  at       DateTime @default(now())
+
+  @@index([at])
+  @@index([actor, at])
 }
