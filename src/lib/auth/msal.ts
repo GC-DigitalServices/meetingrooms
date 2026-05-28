@@ -1,20 +1,12 @@
-import {
-  ConfidentialClientApplication,
-  CryptoProvider,
-} from "@azure/msal-node";
+import { ConfidentialClientApplication, CryptoProvider } from "@azure/msal-node";
 import { getConfig } from "@/lib/config";
 
 // Scopes needed at sign-in:
 //   - openid/profile for the id_token (upn, displayName)
 //   - User.Read       for GET /me
-//   - GroupMember.Read.All for GET /me/transitiveMemberOf
+//   - Group.Read.All for GET /me/transitiveMemberOf
 // The delegated token is used exactly twice then discarded.
-export const SIGN_IN_SCOPES = [
-  "openid",
-  "profile",
-  "User.Read",
-  "GroupMember.Read.All",
-];
+export const SIGN_IN_SCOPES = ["openid", "profile", "User.Read", "Group.Read.All"];
 
 const globalForMsal = globalThis as unknown as {
   _msalApp?: ConfidentialClientApplication;
