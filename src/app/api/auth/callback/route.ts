@@ -45,12 +45,15 @@ export async function GET(req: NextRequest): Promise<Response> {
   const redirectUri = `${PUBLIC_BASE_URL}/api/auth/callback`;
   const { searchParams } = new URL(req.url);
 
-  const code  = searchParams.get("code");
+  const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   if (error) {
-    logger.warn({ error, desc: searchParams.get("error_description") }, "auth: callback error from Microsoft");
+    logger.warn(
+      { error, desc: searchParams.get("error_description") },
+      "auth: callback error from Microsoft",
+    );
     return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=${encodeURIComponent(error)}`);
   }
 
@@ -77,6 +80,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     accessToken = tokenResponse.accessToken;
   } catch (err) {
     logger.error({ err }, "auth: token exchange failed");
+    console.error("TOKEN EXCHANGE ERROR:", err instanceof Error ? err.message : String(err));
     return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=token_exchange`);
   }
 
@@ -86,7 +90,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     const meRes = await fetch(
       "https://graph.microsoft.com/v1.0/me?$select=userPrincipalName,displayName",
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!meRes.ok) throw new Error(`/me returned ${meRes.status}`);
     me = (await meRes.json()) as MeResponse;
@@ -103,8 +107,15 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Upsert user record
   await db.user.upsert({
-    where:  { upn: me.userPrincipalName },
-    create: { upn: me.userPrincipalName, displayName: me.displayName, isStaff, isAdmin, groupIds, lastLoginAt: new Date() },
+    where: { upn: me.userPrincipalName },
+    create: {
+      upn: me.userPrincipalName,
+      displayName: me.displayName,
+      isStaff,
+      isAdmin,
+      groupIds,
+      lastLoginAt: new Date(),
+    },
     update: { displayName: me.displayName, isStaff, isAdmin, groupIds, lastLoginAt: new Date() },
   });
 
