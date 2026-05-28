@@ -22,8 +22,8 @@ export function canUserBookRoom(
   user: UserPermissionInput,
   room: RoomPermissionInput
 ): true {
-  if (!room.bookable) throw new RoomNotBookableError();
   if (user.isAdmin) return true;
+  if (!room.bookable) throw new RoomNotBookableError();
   if (room.allowedGroups.length === 0) return true;
   if (room.allowedGroups.some((g) => user.groupIds.includes(g))) return true;
   throw new NotPermittedError();
