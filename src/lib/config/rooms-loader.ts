@@ -46,7 +46,20 @@ const CompositeRoomSchema = z.object({
   sections: z.array(SectionSchema).min(2, "Composite rooms must have at least 2 sections"),
 });
 
-const RoomEntrySchema = z.union([CompositeRoomSchema, StandardRoomSchema]);
+const MinibusRoomSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("minibus"),
+  mailboxUpn: z.string().email("Minibus mailboxUpn must be a valid email"),
+  displayName: z.string().min(1),
+  building: z.string().optional(),
+  floor: z.string().optional(),
+  capacity: z.number().int().positive(),
+  equipment: z.array(z.string()).default([]),
+  bookable: z.boolean().default(true),
+  allowedGroups: z.array(z.string().uuid()).default([]),
+});
+
+const RoomEntrySchema = z.union([CompositeRoomSchema, MinibusRoomSchema, StandardRoomSchema]);
 
 const RoomsFileSchema = z.object({
   rooms: z.array(RoomEntrySchema).min(1),
@@ -55,6 +68,7 @@ const RoomsFileSchema = z.object({
 export type SectionConfig = z.infer<typeof SectionSchema>;
 export type StandardRoomConfig = z.infer<typeof StandardRoomSchema>;
 export type CompositeRoomConfig = z.infer<typeof CompositeRoomSchema>;
+export type MinibusRoomConfig = z.infer<typeof MinibusRoomSchema>;
 export type RoomConfig = z.infer<typeof RoomEntrySchema>;
 export type RoomsFile = z.infer<typeof RoomsFileSchema>;
 

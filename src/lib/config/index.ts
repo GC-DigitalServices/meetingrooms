@@ -34,6 +34,9 @@ const EnvSchema = z.object({
   PUBLIC_BASE_URL: z.string().url("PUBLIC_BASE_URL must be a valid URL"),
 
   PORT: z.coerce.number().default(3000),
+
+  // Optional — required only when premises notifications are enabled.
+  PREMISES_SENDER_UPN: z.string().email().optional(),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

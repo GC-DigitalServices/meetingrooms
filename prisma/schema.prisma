@@ -15,6 +15,7 @@ enum RoomKind {
   STANDARD
   COMPOSITE
   SECTION
+  MINIBUS
 }
 
 enum BookingSource {
@@ -58,22 +59,28 @@ model Room {
 }
 
 model Booking {
-  id            String        @id @default(cuid())
-  graphEventId  String        @unique
-  graphICalUid  String
-  roomId        String
-  room          Room          @relation(fields: [roomId], references: [id])
-  organiserUpn  String
-  organiserName String
-  subject       String
-  startUtc      DateTime
-  endUtc        DateTime
-  isAllDay      Boolean       @default(false)
-  source        BookingSource
-  lastSyncedAt  DateTime      @default(now())
+  id                 String        @id @default(cuid())
+  graphEventId       String        @unique
+  graphICalUid       String
+  roomId             String
+  room               Room          @relation(fields: [roomId], references: [id])
+  organiserUpn       String
+  organiserName      String
+  subject            String
+  startUtc           DateTime
+  endUtc             DateTime
+  isAllDay           Boolean       @default(false)
+  source             BookingSource
+  lastSyncedAt       DateTime      @default(now())
+
+  // Phase 3: premises notifications
+  premisesNotes      String?
+  premisesNotifyHash String?       // SHA-256 of notify-relevant fields; skip notification if unchanged
+  primaryMailboxUpn  String?       // mailbox where the Graph event lives; used for updates/deletes
 
   @@index([roomId, startUtc, endUtc])
   @@index([graphICalUid])
+  @@index([organiserUpn])
 }
 
 model Device {

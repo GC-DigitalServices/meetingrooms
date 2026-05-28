@@ -12,6 +12,8 @@ const GroupsFileSchema = z.object({
     .array(z.string().uuid("staff_groups entries must be valid UUIDs"))
     .min(1, "At least one staff group is required"),
   admin_group: z.string().uuid("admin_group must be a valid UUID"),
+  // Optional — required for premises notifications.
+  premises_email: z.string().email("premises_email must be a valid email address").optional(),
 });
 
 export type GroupsConfig = z.infer<typeof GroupsFileSchema>;
