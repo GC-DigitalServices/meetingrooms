@@ -1,47 +1,29 @@
-# Room and section definitions for the Room Booking Platform.
-#
-# This file is the source of truth for room metadata. Edit via PR.
-# After merging changes, run `pnpm rooms:import` to apply them to
-# the database.
-
 rooms:
-  # -------- Open study rooms — any signed-in user --------
-  - id: "study-1"
-    mailboxUpn: "study-1@college.ac.uk"
-    displayName: "Study Room 1"
-    building: "Library"
-    floor: "G"
-    capacity: 4
-    equipment: ["whiteboard"]
-    allowedGroups: []
-
-  - id: "study-2"
-    mailboxUpn: "study-2@college.ac.uk"
-    displayName: "Study Room 2"
-    building: "Library"
-    floor: "G"
-    capacity: 4
-    equipment: ["whiteboard"]
-    allowedGroups: []
-
-  # -------- Staff meeting room --------
-  - id: "meeting-b12"
-    mailboxUpn: "b12@college.ac.uk"
-    displayName: "Meeting Room B12"
-    building: "Block B"
-    floor: "1"
+  # -------- Cooksey --------
+  - id: "ct12"
+    mailboxUpn: "ct12@greenhead.ac.uk"
+    displayName: "CT12"
+    building: "Cooksey"
     capacity: 12
-    equipment: ["projector", "whiteboard", "video_conf"]
+    equipment: []
     allowedGroups:
       - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
 
-  # -------- Senior staff / CLT only --------
-  - id: "boardroom"
-    mailboxUpn: "boardroom@college.ac.uk"
-    displayName: "Boardroom"
-    building: "Main Building"
-    floor: "2"
-    capacity: 16
-    equipment: ["projector", "video_conf"]
+  # -------- Dawson --------
+  - id: "d3a"
+    mailboxUpn: "d3a@greenhead.ac.uk"
+    displayName: "D3A"
+    building: "Dawson"
+    capacity: 12
+    equipment: []
+    allowedGroups:
+      - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
+
+  - id: "d17"
+    mailboxUpn: "d17@greenhead.ac.uk"
+    displayName: "D17"
+    building: "Dawson"
+    capacity: 12
+    equipment: []
     allowedGroups:
       - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
