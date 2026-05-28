@@ -3,49 +3,45 @@
 # This file is the source of truth for room metadata. Edit via PR.
 # After merging changes, run `pnpm rooms:import` to apply them to
 # the database.
-#
-# Schema:
-#   rooms:
-#     - id           string  (stable identifier — never change after first use)
-#       mailboxUpn   string  (REQUIRED for STANDARD and SECTION rooms; OMIT for COMPOSITE)
-#       kind         "standard" | "composite"   (default: "standard")
-#       displayName  string
-#       building     string
-#       floor        string
-#       capacity     int
-#       equipment    list of strings (free-text tags, e.g. "projector", "whiteboard")
-#       bookable     bool   (default: true; set false to hide from the grid)
-#       allowedGroups list of Entra group object IDs (empty = anyone signed in can book)
-#       sections     list of section rooms (ONLY for composite rooms; otherwise omit)
-#
-# allowedGroups semantics:
-#   - Empty list: any signed-in user can book.
-#   - Non-empty list: user must be a member of at least one of the listed groups.
 
 rooms:
-
-  # -------- Cooksey --------
-  - id: "ct12"
-    mailboxUpn: "ct12@greenhead.ac.uk"
-    displayName: "CT12"
-    building: "Cooksey"
-    capacity: 12         # TODO: confirm actual capacity
-    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
-    allowedGroups: []    # empty = any signed-in user can book
-
-  # -------- Dawson --------
-  - id: "d3a"
-    mailboxUpn: "d3a@greenhead.ac.uk"
-    displayName: "D3A"
-    building: "Dawson"
-    capacity: 12         # TODO: confirm actual capacity
-    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
+  # -------- Open study rooms — any signed-in user --------
+  - id: "study-1"
+    mailboxUpn: "study-1@college.ac.uk"
+    displayName: "Study Room 1"
+    building: "Library"
+    floor: "G"
+    capacity: 4
+    equipment: ["whiteboard"]
     allowedGroups: []
 
-  - id: "d17"
-    mailboxUpn: "d17@greenhead.ac.uk"
-    displayName: "D17"
-    building: "Dawson"
-    capacity: 12         # TODO: confirm actual capacity
-    equipment: []        # TODO: add equipment e.g. ["projector", "whiteboard"]
+  - id: "study-2"
+    mailboxUpn: "study-2@college.ac.uk"
+    displayName: "Study Room 2"
+    building: "Library"
+    floor: "G"
+    capacity: 4
+    equipment: ["whiteboard"]
     allowedGroups: []
+
+  # -------- Staff meeting room --------
+  - id: "meeting-b12"
+    mailboxUpn: "b12@college.ac.uk"
+    displayName: "Meeting Room B12"
+    building: "Block B"
+    floor: "1"
+    capacity: 12
+    equipment: ["projector", "whiteboard", "video_conf"]
+    allowedGroups:
+      - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
+
+  # -------- Senior staff / CLT only --------
+  - id: "boardroom"
+    mailboxUpn: "boardroom@college.ac.uk"
+    displayName: "Boardroom"
+    building: "Main Building"
+    floor: "2"
+    capacity: 16
+    equipment: ["projector", "video_conf"]
+    allowedGroups:
+      - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
