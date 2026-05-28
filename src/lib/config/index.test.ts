@@ -84,10 +84,7 @@ describe("getConfig", () => {
 
   it("defaults PORT to 3000 when not set", async () => {
     vi.stubEnv("PORT", "");
-    const { getConfig } = await import("./index");
-    // Empty string coerces to NaN, zod falls back to default
-    // PORT has .default(3000) so unset means 3000
-    // Re-import without PORT stubbed
+    await import("./index"); // trigger module load with stubbed env
     vi.resetModules();
     vi.unstubAllEnvs();
     for (const [key, val] of Object.entries(VALID_ENV)) {

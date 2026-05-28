@@ -1,10 +1,11 @@
 import { db } from "@/lib/db/client";
+import type { Prisma } from "@prisma/client";
 
 export interface AuditEntry {
   actor: string;
   action: string;
   targetId?: string;
-  metadata: Record<string, unknown>;
+  metadata: Prisma.InputJsonValue;
 }
 
 export async function writeAudit(entry: AuditEntry): Promise<void> {
