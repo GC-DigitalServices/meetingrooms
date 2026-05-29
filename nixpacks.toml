@@ -1,0 +1,8 @@
+# Override nixpacks install phase so Railway can install new dependencies when
+# the lockfile has been updated in the same commit. Switch back to --frozen-lockfile
+# after the lockfile has been regenerated in Codespaces and committed.
+[phases.install]
+cmds = [
+  "npm install -g corepack@0.24.1 && corepack enable",
+  "pnpm install --no-frozen-lockfile",
+]
