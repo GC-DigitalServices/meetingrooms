@@ -218,12 +218,12 @@ async function handleSubscribe(socket: any, rawIds: unknown[], clientData: Porta
       );
       continue;
     }
-    socket.join(`room:${room.id}`); // eslint-disable-line @typescript-eslint/no-unsafe-call
+    socket.join(`room:${room.id}`);
     clientData.subscribedRooms.add(room.id);
 
     try {
       const snapshot = await computeSnapshot(room.id, clientData);
-      socket.emit("message", snapshot); // eslint-disable-line @typescript-eslint/no-unsafe-call
+      socket.emit("message", snapshot);
       logger.info({ upn: clientData.upn, roomId: room.id }, "ws: ws_messages_out snapshot");
     } catch (err) {
       logger.error({ err, roomId: room.id }, "ws: snapshot failed");
@@ -235,7 +235,7 @@ async function handleSubscribe(socket: any, rawIds: unknown[], clientData: Porta
 async function handleUnsubscribe(socket: any, rawIds: unknown[], clientData: PortalClientData) {
   for (const id of rawIds) {
     if (typeof id !== "string") continue;
-    socket.leave(`room:${id}`); // eslint-disable-line @typescript-eslint/no-unsafe-call
+    socket.leave(`room:${id}`);
     clientData.subscribedRooms.delete(id);
   }
 }

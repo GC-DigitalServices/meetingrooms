@@ -66,8 +66,8 @@ export default async function AdminAuditPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {meta.roomId && <span>Room: {String(meta.roomId)}</span>}
-                      {meta.start && (
+                      {!!meta.roomId && <span>Room: {String(meta.roomId)}</span>}
+                      {!!meta.start && (
                         <span className="ml-2">
                           {fmt.format(new Date(String(meta.start)))}
                         </span>
