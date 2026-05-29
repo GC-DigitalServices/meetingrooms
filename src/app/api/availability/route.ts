@@ -1,0 +1,77 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSession, AuthError } from "@/lib/auth";
+import { canSeeRoom } from "@/lib/booking/visibility";
+import { db } from "@/lib/db/client";
+
+export const runtime = "nodejs";
+
+export interface RoomAvailability {
+  free: boolean;
+  /** ISO string of the next booking start after the requested window. */
+  nextStart?: string;
+  /** ISO string of the next booking end after the requested window. */
+  nextEnd?: string;
+}
+
+/**
+ * GET /api/availability?from=<ISO>&to=<ISO>
+ * Returns availability for every room the caller can see in the requested window.
+ */
+export async function GET(req: NextRequest): Promise<Response> {
+  let session;
+  try {
+    session = await requireSession(req);
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    throw err;
+  }
+
+  const { searchParams } = req.nextUrl;
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  if (!fromParam || !toParam) {
+    return NextResponse.json({ error: "from and to are required ISO strings" }, { status: 400 });
+  }
+
+  const fromDate = new Date(fromParam);
+  const toDate = new Date(toParam);
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()) || fromDate >= toDate) {
+    return NextResponse.json({ error: "Invalid from/to" }, { status: 400 });
+  }
+
+  const rooms = await db.room.findMany({});
+  const visible = rooms.filter((r) =>
+    canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, true)
+  );
+  const roomIds = visible.map((r) => r.id);
+
+  // Which rooms have a booking that overlaps [from, to)?
+  const conflicts = await db.booking.findMany({
+    where: { roomId: { in: roomIds }, startUtc: { lt: toDate }, endUtc: { gt: fromDate } },
+    select: { roomId: true },
+  });
+  const conflictSet = new Set(conflicts.map((c) => c.roomId));
+
+  // Next upcoming booking per room (starting at or after fromDate)
+  const futureBookings = await db.booking.findMany({
+    where: { roomId: { in: roomIds }, startUtc: { gte: fromDate } },
+    orderBy: { startUtc: "asc" },
+    select: { roomId: true, startUtc: true, endUtc: true },
+  });
+  const nextByRoom = new Map<string, { startUtc: Date; endUtc: Date }>();
+  for (const b of futureBookings) {
+    if (!nextByRoom.has(b.roomId)) nextByRoom.set(b.roomId, b);
+  }
+
+  const result: Record<string, RoomAvailability> = {};
+  for (const room of visible) {
+    const next = nextByRoom.get(room.id);
+    result[room.id] = {
+      free: !conflictSet.has(room.id),
+      nextStart: next?.startUtc.toISOString(),
+      nextEnd: next?.endUtc.toISOString(),
+    };
+  }
+
+  return NextResponse.json(result);
+}

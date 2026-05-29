@@ -37,15 +37,8 @@ export default function Header({ session }: Props) {
           )}
         </nav>
 
-        {/* Right: CTA + user */}
+        {/* Right: user chip */}
         <div className="flex items-center gap-md">
-          <Link
-            href="/"
-            className="hidden sm:inline-flex bg-secondary-container text-on-secondary-container px-5 py-2 rounded-xl font-bold text-label-md hover:opacity-90 active:scale-95 transition-all"
-          >
-            Book Now
-          </Link>
-
           <div className="flex items-center gap-2 bg-primary-container px-3 py-1.5 rounded-full text-on-primary text-label-sm">
             <span className="material-symbols-outlined text-sm">person</span>
             <span className="hidden sm:inline max-w-[120px] truncate">{session.displayName}</span>
