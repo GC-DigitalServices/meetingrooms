@@ -53,3 +53,16 @@ jobs:
           SESSION_SECRET: ci-session-secret-placeholder-at-least-32
           QR_SIGNING_KEY: ci-qr-signing-key-placeholder-at-least-32
           PUBLIC_BASE_URL: http://localhost:3000
+
+      - name: Next.js build (catches lint + type errors Railway would catch)
+        run: pnpm build
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379
+          AZURE_TENANT_ID: 00000000-0000-0000-0000-000000000000
+          AZURE_CLIENT_ID: 00000000-0000-0000-0000-000000000001
+          AZURE_CLIENT_SECRET: ci-secret-placeholder
+          SESSION_SECRET: ci-session-secret-placeholder-at-least-32
+          QR_SIGNING_KEY: ci-qr-signing-key-placeholder-at-least-32
+          PUBLIC_BASE_URL: http://localhost:3000
