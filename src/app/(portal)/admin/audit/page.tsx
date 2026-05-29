@@ -61,7 +61,7 @@ export default async function AdminAuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       {ACTION_LABEL[log.action] ?? log.action}
-                      {meta.adminOverride && (
+                      {!!meta.adminOverride && (
                         <span className="ml-1 text-xs text-amber-600 font-medium">(admin override)</span>
                       )}
                     </td>
