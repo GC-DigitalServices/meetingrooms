@@ -55,15 +55,6 @@ export default async function PortalPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Rooms</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {session.isStaff || session.isAdmin
-            ? "Find and book an available room"
-            : "Find and book a room you're permitted to use"}
-        </p>
-      </div>
-
       <RoomGrid
         rooms={visibleRooms.map((r) => ({
           id: r.id,

@@ -35,9 +35,10 @@ export default async function SignInPage({
           <div className="text-center mb-lg">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-md">
               <span className="material-symbols-outlined text-4xl text-primary">meeting_room</span>
+
             </div>
             <h1 className="font-display font-extrabold text-headline-lg text-on-background mb-2">
-              Room Booking
+              Meeting Room Booking
             </h1>
             <p className="text-body-md text-on-surface-variant">
               Sign in with your Greenhead College Microsoft account to find and book spaces.

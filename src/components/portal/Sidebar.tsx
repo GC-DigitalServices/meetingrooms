@@ -12,7 +12,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/", icon: "search", label: "Room Finder" },
+  { href: "/", icon: "search", label: "Meeting Rooms" },
   { href: "/bookings", icon: "event_note", label: "My Bookings" },
   { href: "/minibus", icon: "directions_bus", label: "Minibus", soon: true },
   { href: "/profile", icon: "person", label: "Profile" },

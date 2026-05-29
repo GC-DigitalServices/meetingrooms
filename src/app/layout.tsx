@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Greenhead College | Room Booking",
-  description: "Book rooms and spaces at Greenhead College",
+  title: "Greenhead College | Meeting Room Booking",
+  description: "Book meeting rooms at Greenhead College",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

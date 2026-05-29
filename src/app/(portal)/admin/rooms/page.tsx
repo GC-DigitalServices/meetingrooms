@@ -22,8 +22,8 @@ export default async function AdminRoomsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Rooms</h1>
-          <p className="text-sm text-muted-foreground mt-1">{rooms.length} rooms configured</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Meeting Rooms</h1>
+          <p className="text-sm text-muted-foreground mt-1">{rooms.length} meeting rooms configured</p>
         </div>
         <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">
           ← Admin

@@ -19,7 +19,7 @@ export default function Header({ session }: Props) {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-lg">
           <Link href="/" className="text-on-primary font-medium hover:text-secondary-container transition-colors">
-            Rooms
+            Meeting Rooms
           </Link>
           <Link href="/bookings" className="text-on-primary font-medium hover:text-secondary-container transition-colors">
             My Bookings

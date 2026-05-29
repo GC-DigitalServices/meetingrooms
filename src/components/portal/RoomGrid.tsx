@@ -182,11 +182,11 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
       {/* Page heading */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-md mb-lg">
         <div>
-          <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Room Finder</h1>
+          <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Meeting Room Finder</h1>
           <p className="text-body-md text-on-surface-variant max-w-lg">
             {isStaff || isAdmin
-              ? "Find and reserve an available room for teaching, meetings or study."
-              : "Find and book a room you're permitted to use."}
+              ? "Find and reserve a meeting room for teaching, meetings or study."
+              : "Find and book a meeting room you're permitted to use."}
           </p>
         </div>
         <div className="w-full md:w-96 relative">
@@ -250,7 +250,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
                     }`}
                   >
                     <span className="material-symbols-outlined text-base">{onlyFree ? "check_box" : "check_box_outline_blank"}</span>
-                    Show only available rooms
+                    Show only available meeting rooms
                   </button>
                 </div>
               </div>
@@ -282,7 +282,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
                   }`}
                 >
                   <span className="material-symbols-outlined text-base">{showAll ? "check_box" : "check_box_outline_blank"}</span>
-                  Show all rooms
+                  Show all meeting rooms
                 </button>
               )}
             </div>
@@ -294,7 +294,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
           <div className="flex justify-between items-center mb-md">
             <div>
               <h2 className="font-display font-semibold text-headline-md">
-                {freeCount} room{freeCount !== 1 ? "s" : ""} available
+                {freeCount} meeting room{freeCount !== 1 ? "s" : ""} available
               </h2>
               <p className="text-label-md font-label-md text-on-surface-variant">
                 {filterDate === todayStr()
@@ -308,7 +308,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
           {filtered.length === 0 ? (
             <div className="bg-white rounded-xl border border-surface-container-highest shadow-card p-lg text-center">
               <span className="material-symbols-outlined text-5xl text-outline mb-4 block">search_off</span>
-              <p className="text-body-md text-on-surface-variant">No rooms match your filters.</p>
+              <p className="text-body-md text-on-surface-variant">No meeting rooms match your filters.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-gutter">

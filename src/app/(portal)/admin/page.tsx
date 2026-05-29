@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { DoorOpen, Tablet, ClipboardList } from "lucide-react";
 
 const SECTIONS = [
-  { href: "/admin/rooms", icon: DoorOpen, title: "Rooms", desc: "Edit room metadata and permissions" },
+  { href: "/admin/rooms", icon: DoorOpen, title: "Meeting Rooms", desc: "Edit meeting room metadata and permissions" },
   { href: "/admin/devices", icon: Tablet, title: "Devices", desc: "Pair and manage iPad displays" },
   { href: "/admin/audit", icon: ClipboardList, title: "Audit log", desc: "Review all booking actions" },
 ];

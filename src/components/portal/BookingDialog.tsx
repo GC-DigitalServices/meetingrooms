@@ -289,7 +289,7 @@ export default function BookingDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || !subject.trim()}>
-            {submitting ? "Booking…" : "Book room"}
+            {submitting ? "Booking…" : "Book meeting room"}
           </Button>
         </DialogFooter>
       </DialogContent>

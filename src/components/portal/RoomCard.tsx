@@ -112,7 +112,7 @@ export default function RoomCard({ room, bookings, canBook, nextLabel, filterDat
               onClick={() => setDialogOpen(true)}
               className="w-full bg-secondary-container text-on-secondary-container py-3 rounded-xl font-bold text-label-md hover:opacity-90 active:scale-95 transition-all"
             >
-              Reserve Room
+              Reserve Meeting Room
             </button>
           ) : (
             <Link
