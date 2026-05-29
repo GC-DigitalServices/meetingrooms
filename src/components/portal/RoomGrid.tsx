@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useReducer, useState } from "react";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import RoomCard from "./RoomCard";
 import { computeRoomStatus } from "@/lib/booking/status";
 import { useSocket } from "@/lib/socket-context";
@@ -29,7 +25,6 @@ interface Props {
   permittedRoomIds: string[];
 }
 
-// Keyed bookings map: roomId → BookingSlot[]
 type BookingsMap = Record<string, BookingSlot[]>;
 
 type Action =
@@ -68,14 +63,8 @@ function buildInitialMap(bookings: BookingSlot[]): BookingsMap {
   return map;
 }
 
-export default function RoomGrid({
-  rooms,
-  initialBookings,
-  isStaff,
-  isAdmin,
-  permittedRoomIds,
-}: Props) {
-  const { socket, connState } = useSocket();
+export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, permittedRoomIds }: Props) {
+  const { socket } = useSocket();
   const [bookingsMap, dispatch] = useReducer(reducer, initialBookings, buildInitialMap);
   const [search, setSearch] = useState("");
   const [availFilter, setAvailFilter] = useState<"any" | "free">("any");
@@ -84,7 +73,6 @@ export default function RoomGrid({
 
   const permitted = new Set(permittedRoomIds);
 
-  // Subscribe to all visible rooms via Socket.IO
   useEffect(() => {
     if (!socket) return;
     const roomIds = rooms.map((r) => r.id);
@@ -92,15 +80,14 @@ export default function RoomGrid({
 
     function onMessage(msg: { type: string; payload: Record<string, unknown> }) {
       const p = msg.payload;
-      if (msg.type === "snapshot") {
+      if (msg.type === "snapshot")
         dispatch({ type: "SNAPSHOT", roomId: p.roomId as string, bookings: p.bookings as BookingSlot[] });
-      } else if (msg.type === "booking.created") {
+      else if (msg.type === "booking.created")
         dispatch({ type: "ADD", booking: p.booking as BookingSlot });
-      } else if (msg.type === "booking.updated") {
+      else if (msg.type === "booking.updated")
         dispatch({ type: "UPDATE", booking: p.booking as BookingSlot });
-      } else if (msg.type === "booking.deleted") {
+      else if (msg.type === "booking.deleted")
         dispatch({ type: "DELETE", roomId: p.roomId as string, bookingId: p.bookingId as string });
-      }
     }
 
     socket.on("message", onMessage);
@@ -115,21 +102,11 @@ export default function RoomGrid({
 
   const filtered = rooms
     .filter((r) => {
-      // Visibility: non-staff see only permitted rooms unless showAll
       if (!isStaff && !isAdmin && !showAll && !permitted.has(r.id)) return false;
-      // Search
-      if (
-        search &&
-        !r.displayName.toLowerCase().includes(search.toLowerCase()) &&
-        !r.building?.toLowerCase().includes(search.toLowerCase())
-      )
-        return false;
-      // Capacity
+      if (search && !r.displayName.toLowerCase().includes(search.toLowerCase()) &&
+          !r.building?.toLowerCase().includes(search.toLowerCase())) return false;
       if (r.capacity < minCapacity) return false;
-      // Availability
-      if (availFilter === "free") {
-        if (computeRoomStatus(bookingsMap[r.id] ?? [], now) === "busy") return false;
-      }
+      if (availFilter === "free" && computeRoomStatus(bookingsMap[r.id] ?? [], now) === "busy") return false;
       return true;
     })
     .sort((a, b) => {
@@ -140,76 +117,143 @@ export default function RoomGrid({
       return a.displayName.localeCompare(b.displayName);
     });
 
-  const loading = connState === "connecting" && Object.keys(bookingsMap).length === 0;
+  const freeCount = filtered.filter(
+    (r) => computeRoomStatus(bookingsMap[r.id] ?? [], now) === "free"
+  ).length;
 
   return (
-    <div className="space-y-4">
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            className="pl-9"
-            placeholder="Search rooms…"
+    <div>
+      {/* Page heading */}
+      <div className="flex flex-col md:flex-row justify-between items-end gap-md mb-lg">
+        <div className="w-full md:w-auto">
+          <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">
+            Room Finder
+          </h1>
+          <p className="text-body-md text-on-surface-variant max-w-lg">
+            {isStaff || isAdmin
+              ? "Find and reserve an available room for teaching, meetings or study."
+              : "Find and book a room you're permitted to use."}
+          </p>
+        </div>
+
+        {/* Search bar */}
+        <div className="w-full md:w-96 relative">
+          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">
+            search
+          </span>
+          <input
+            className="w-full pl-12 pr-4 py-3 bg-white border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-body-md"
+            placeholder="Search by room name or building…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
-        <select
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          value={availFilter}
-          onChange={(e) => setAvailFilter(e.target.value as "any" | "free")}
-        >
-          <option value="any">Any availability</option>
-          <option value="free">Free now</option>
-        </select>
-
-        <select
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          value={minCapacity}
-          onChange={(e) => setMinCapacity(Number(e.target.value))}
-        >
-          <option value={0}>Any capacity</option>
-          <option value={4}>4+ people</option>
-          <option value={8}>8+ people</option>
-          <option value={12}>12+ people</option>
-          <option value={20}>20+ people</option>
-        </select>
-
-        {/* Show all toggle — only shown to non-staff who don't see all rooms by default */}
-        {!isStaff && !isAdmin && (
-          <Button
-            variant={showAll ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Showing all rooms" : "Show all rooms"}
-          </Button>
-        )}
       </div>
 
-      {/* Grid */}
-      {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-36 rounded-lg" />
-          ))}
+      {/* Two-column layout: filters left, cards right */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-gutter">
+        {/* Filters panel */}
+        <div className="xl:col-span-3">
+          <section className="bg-white rounded-xl shadow-card p-md border border-surface-container-highest">
+            <h3 className="font-display font-semibold text-headline-md mb-md">Refine Search</h3>
+
+            <div className="space-y-md">
+              {/* Availability */}
+              <div>
+                <label className="text-label-md font-label-md text-on-surface-variant block mb-2">
+                  Availability
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["any", "free"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setAvailFilter(v)}
+                      className={`p-2.5 rounded-xl text-label-sm font-label-sm border transition-colors ${
+                        availFilter === v
+                          ? "border-2 border-primary bg-primary/5 text-primary font-bold"
+                          : "border-outline-variant hover:border-primary"
+                      }`}
+                    >
+                      {v === "any" ? "Any" : "Free now"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Capacity */}
+              <div>
+                <label className="text-label-md font-label-md text-on-surface-variant block mb-2">
+                  Minimum capacity
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[0, 4, 10, 20].map((cap) => (
+                    <button
+                      key={cap}
+                      onClick={() => setMinCapacity(cap)}
+                      className={`p-2.5 rounded-xl text-label-sm font-label-sm border transition-colors ${
+                        minCapacity === cap
+                          ? "border-2 border-primary bg-primary/5 text-primary font-bold"
+                          : "border-outline-variant hover:border-primary"
+                      }`}
+                    >
+                      {cap === 0 ? "Any" : `${cap}+`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Show all toggle for non-staff */}
+              {!isStaff && !isAdmin && (
+                <div>
+                  <label className="text-label-md font-label-md text-on-surface-variant block mb-2">
+                    Visibility
+                  </label>
+                  <button
+                    onClick={() => setShowAll((v) => !v)}
+                    className={`w-full p-2.5 rounded-xl text-label-sm font-label-sm border transition-colors ${
+                      showAll
+                        ? "border-2 border-primary bg-primary/5 text-primary font-bold"
+                        : "border-outline-variant hover:border-primary"
+                    }`}
+                  >
+                    {showAll ? "Showing all rooms" : "Show all rooms"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-center text-muted-foreground py-16">No rooms match your filters.</p>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((room) => (
-            <RoomCard
-              key={room.id}
-              room={room}
-              bookings={bookingsMap[room.id] ?? []}
-              canBook={permitted.has(room.id)}
-            />
-          ))}
+
+        {/* Room cards */}
+        <div className="xl:col-span-9">
+          <div className="flex justify-between items-center mb-md">
+            <h2 className="font-display font-semibold text-headline-md">
+              {freeCount} room{freeCount !== 1 ? "s" : ""} available
+            </h2>
+            <p className="text-label-md font-label-md text-on-surface-variant">
+              {filtered.length} total shown
+            </p>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="bg-white rounded-xl border border-surface-container-highest shadow-card p-lg text-center">
+              <span className="material-symbols-outlined text-5xl text-outline mb-4 block">search_off</span>
+              <p className="text-body-md text-on-surface-variant">No rooms match your filters.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-gutter">
+              {filtered.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  bookings={bookingsMap[room.id] ?? []}
+                  canBook={permitted.has(room.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

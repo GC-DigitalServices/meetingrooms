@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Users, MapPin, Projector, Tv, Wifi } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import StatusPill from "./StatusPill";
 import BookingDialog from "./BookingDialog";
 import { computeRoomStatus } from "@/lib/booking/status";
@@ -25,67 +23,103 @@ interface Props {
   canBook: boolean;
 }
 
-const EQUIP_ICON: Record<string, React.ReactNode> = {
-  projector: <Projector className="h-3.5 w-3.5" />,
-  tv: <Tv className="h-3.5 w-3.5" />,
-  screen: <Tv className="h-3.5 w-3.5" />,
-  wifi: <Wifi className="h-3.5 w-3.5" />,
-  av: <Tv className="h-3.5 w-3.5" />,
+// Equipment icon mapping (Material Symbols)
+const EQUIP_ICON: Record<string, string> = {
+  projector: "videocam",
+  tv: "tv",
+  screen: "tv",
+  wifi: "wifi",
+  av: "speaker",
+  whiteboard: "draw",
+  pc: "computer",
+  computers: "computer",
+};
+
+// Gradient per room kind — placeholder for rooms without photos
+const KIND_GRADIENT: Record<string, string> = {
+  STANDARD: "from-[#003a35] via-[#00534c] to-[#005f56]",
+  COMPOSITE: "from-[#003a35] via-[#005049] to-[#003a35]",
+  SECTION: "from-[#00534c] via-[#005049] to-[#003a35]",
+  MINIBUS: "from-[#855300] via-[#965f00] to-[#633d00]",
+};
+
+const BUILDING_ICON: Record<string, string> = {
+  Cooksey: "science",
+  Dawson: "architecture",
 };
 
 export default function RoomCard({ room, bookings, canBook }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const status = computeRoomStatus(bookings);
+  const gradient = KIND_GRADIENT[room.kind] ?? KIND_GRADIENT.STANDARD;
+  const buildingIcon = (room.building && BUILDING_ICON[room.building]) ?? "meeting_room";
 
   return (
     <>
-      <Card className="flex flex-col hover:shadow-md transition-shadow">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-base leading-snug">
-              <Link href={`/rooms/${room.id}`} className="hover:underline">
-                {room.displayName}
-              </Link>
-            </CardTitle>
-            <StatusPill status={status} className="shrink-0" />
+      <div className="group bg-white rounded-xl overflow-hidden border border-surface-container-highest shadow-card hover:shadow-card-hover transition-all duration-300">
+        {/* Image / gradient placeholder */}
+        <Link href={`/rooms/${room.id}`} className="block relative h-44 overflow-hidden">
+          <div
+            className={`absolute inset-0 bg-gradient-to-br ${gradient} group-hover:scale-105 transition-transform duration-500`}
+          />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/80">
+            <span className="material-symbols-outlined text-5xl opacity-70">{buildingIcon}</span>
+            {room.building && (
+              <span className="text-label-sm font-label-sm text-white/60 uppercase tracking-widest">
+                {room.building}
+                {room.floor ? ` · ${room.floor}` : ""}
+              </span>
+            )}
+          </div>
+          {/* Status badge overlaid on image */}
+          <div className="absolute top-3 right-3">
+            <StatusPill status={status} />
+          </div>
+        </Link>
+
+        {/* Card body */}
+        <div className="p-md">
+          <div className="mb-2">
+            <Link
+              href={`/rooms/${room.id}`}
+              className="font-display font-semibold text-headline-md text-on-background hover:text-primary transition-colors leading-tight"
+            >
+              {room.displayName}
+            </Link>
           </div>
 
-          {(room.building || room.floor) && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-              <MapPin className="h-3 w-3" />
-              {[room.building, room.floor].filter(Boolean).join(", ")}
+          <div className="flex flex-wrap gap-md mb-md text-on-surface-variant">
+            <div className="flex items-center gap-xs text-label-md font-label-md">
+              <span className="material-symbols-outlined text-base">groups</span>
+              {room.capacity} {room.capacity === 1 ? "person" : "people"}
             </div>
-          )}
-        </CardHeader>
-
-        <CardContent className="pt-0 flex flex-col gap-3 flex-1">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              {room.capacity}
-            </span>
-            {room.equipment.slice(0, 3).map((e) => (
-              <span key={e} title={e} className="flex items-center gap-1">
-                {EQUIP_ICON[e.toLowerCase()] ?? null}
-                <span className="text-xs sr-only">{e}</span>
-              </span>
+            {room.equipment.slice(0, 2).map((e) => (
+              <div key={e} className="flex items-center gap-xs text-label-md font-label-md capitalize">
+                <span className="material-symbols-outlined text-base">
+                  {EQUIP_ICON[e.toLowerCase()] ?? "devices"}
+                </span>
+                {e}
+              </div>
             ))}
           </div>
 
-          <div className="mt-auto">
-            {canBook ? (
-              <button
-                onClick={() => setDialogOpen(true)}
-                className="w-full rounded-md border border-primary text-primary text-sm py-1.5 hover:bg-primary hover:text-primary-foreground transition-colors"
-              >
-                Book
-              </button>
-            ) : (
-              <p className="text-xs text-muted-foreground">Not permitted to book</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          {canBook ? (
+            <button
+              onClick={() => setDialogOpen(true)}
+              className="w-full bg-secondary-container text-on-secondary-container py-3 rounded-xl font-bold text-label-md hover:opacity-90 active:scale-95 transition-all"
+            >
+              Reserve Room
+            </button>
+          ) : (
+            <Link
+              href={`/rooms/${room.id}`}
+              className="block w-full text-center border border-outline-variant text-on-surface-variant py-3 rounded-xl font-label-md hover:bg-surface-container transition-colors"
+            >
+              View Schedule
+            </Link>
+          )}
+        </div>
+      </div>
 
       {canBook && (
         <BookingDialog

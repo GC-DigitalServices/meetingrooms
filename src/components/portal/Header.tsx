@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { CalendarDays } from "lucide-react";
-import AccountMenu from "./AccountMenu";
 import type { Session } from "@/lib/auth/session";
 
 interface Props {
@@ -9,44 +7,52 @@ interface Props {
 
 export default function Header({ session }: Props) {
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-14 items-center gap-4 px-4 max-w-7xl">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <span>Room Booking</span>
-        </Link>
+    <header className="bg-primary text-on-primary sticky top-0 z-50 w-full border-b border-primary-container shadow-sm">
+      <div className="flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop py-4">
+        {/* Brand */}
+        <div className="flex items-center gap-base">
+          <span className="font-display font-extrabold text-headline-md text-on-primary tracking-tight">
+            Greenhead College
+          </span>
+        </div>
 
-        <nav className="flex items-center gap-4 text-sm ml-2">
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-lg">
           <Link
             href="/"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-on-primary font-medium hover:text-secondary-container transition-colors"
           >
             Rooms
           </Link>
           <Link
             href="/bookings"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-on-primary font-medium hover:text-secondary-container transition-colors"
           >
             My Bookings
           </Link>
           {session.isAdmin && (
             <Link
               href="/admin"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-on-primary font-medium hover:text-secondary-container transition-colors"
             >
               Admin
             </Link>
           )}
         </nav>
 
-        <div className="ml-auto">
-          <AccountMenu
-            session={{
-              displayName: session.displayName,
-              upn: session.upn,
-              isAdmin: session.isAdmin,
-            }}
-          />
+        {/* Right: CTA + user */}
+        <div className="flex items-center gap-md">
+          <Link
+            href="/"
+            className="hidden sm:inline-flex bg-secondary-container text-on-secondary-container px-5 py-2 rounded-xl font-bold text-label-md hover:opacity-90 active:scale-95 transition-all"
+          >
+            Book Now
+          </Link>
+
+          <div className="flex items-center gap-2 bg-primary-container px-3 py-1.5 rounded-full text-on-primary text-label-sm">
+            <span className="material-symbols-outlined text-sm">person</span>
+            <span className="hidden sm:inline max-w-[120px] truncate">{session.displayName}</span>
+          </div>
         </div>
       </div>
     </header>

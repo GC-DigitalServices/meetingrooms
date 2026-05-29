@@ -6,9 +6,9 @@ interface Props {
 }
 
 const CONFIG = {
-  free: { label: "Free", cls: "bg-status-free text-white" },
-  busy: { label: "Busy", cls: "bg-status-busy text-white" },
-  soon: { label: "Starting soon", cls: "bg-status-soon text-white" },
+  free: { label: "Available", cls: "bg-[#e8f5e9] text-[#1b5e20]" },
+  busy: { label: "Occupied", cls: "bg-[#ffebee] text-[#b71c1c]" },
+  soon: { label: "Starting soon", cls: "bg-[#fff8e1] text-[#e65100]" },
 };
 
 export default function StatusPill({ status, className }: Props) {
@@ -16,7 +16,7 @@ export default function StatusPill({ status, className }: Props) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-label-sm font-label-sm",
         cls,
         className
       )}

@@ -1,17 +1,15 @@
 "use client";
 
-import { WifiOff } from "lucide-react";
 import { useSocket } from "@/lib/socket-context";
 
 export default function ConnectionBanner() {
   const { connState } = useSocket();
-
   if (connState === "connected" || connState === "connecting") return null;
 
   return (
-    <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
-      <div className="container mx-auto flex items-center gap-2 text-sm text-amber-800 max-w-7xl">
-        <WifiOff className="h-4 w-4 shrink-0" />
+    <div className="bg-[#fff8e1] border-b border-[#ffe082] px-margin-mobile md:px-margin-desktop py-2 lg:ml-64">
+      <div className="flex items-center gap-2 text-label-md font-label-md text-[#e65100]">
+        <span className="material-symbols-outlined text-base">wifi_off</span>
         {connState === "disconnected"
           ? "Reconnecting — live updates paused"
           : "Connection degraded — updates may be delayed"}
