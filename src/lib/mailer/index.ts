@@ -69,9 +69,9 @@ export function shouldNotifyPremises(roomKind: string, premisesNotes: string | n
  * roll back the booking.
  */
 export async function sendPremisesNotification(params: PremisesNotifyParams): Promise<void> {
-  const { PREMISES_SENDER_UPN } = getConfig();
-  if (!PREMISES_SENDER_UPN) {
-    logger.warn("mailer: PREMISES_SENDER_UPN not configured, skipping premises notification");
+  const { MAIL_SENDER_UPN } = getConfig();
+  if (!MAIL_SENDER_UPN) {
+    logger.warn("mailer: MAIL_SENDER_UPN not configured, skipping premises notification");
     return;
   }
 
@@ -97,7 +97,7 @@ export async function sendPremisesNotification(params: PremisesNotifyParams): Pr
 
   try {
     await graphClient.post(
-      `/users/${encodeURIComponent(PREMISES_SENDER_UPN)}/sendMail`,
+      `/users/${encodeURIComponent(MAIL_SENDER_UPN)}/sendMail`,
       {
         message: {
           subject,

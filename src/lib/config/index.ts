@@ -35,8 +35,8 @@ const EnvSchema = z.object({
 
   PORT: z.coerce.number().default(3000),
 
-  // Optional — required only when premises notifications are enabled.
-  PREMISES_SENDER_UPN: z.string().email().optional(),
+  // Optional — mailbox used as the From address for premises/transport notifications.
+  MAIL_SENDER_UPN: z.string().email().optional(),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
