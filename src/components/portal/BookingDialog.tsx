@@ -75,6 +75,8 @@ export default function BookingDialog({
   const [endTime, setEndTime] = useState(initialEnd);
   const [subject, setSubject] = useState("");
   const [premisesNotes, setPremisesNotes] = useState("");
+  const [needAssistance, setNeedAssistance] = useState(false);
+  const [assistanceNotes, setAssistanceNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +90,8 @@ export default function BookingDialog({
       setEndTime(initialEnd);
       setSubject("");
       setPremisesNotes("");
+      setNeedAssistance(false);
+      setAssistanceNotes("");
       setError(null);
     }
   }, [open, date, initialStart, initialEnd]);
@@ -111,9 +115,20 @@ export default function BookingDialog({
       setError("Destination, number of passengers and driver name are required for minibus bookings.");
       return;
     }
+    if (needAssistance && !assistanceNotes.trim()) {
+      setError("Please describe what premises assistance you need.");
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
+
+    // Determine premises notes: minibus uses its own field; other rooms use assistance notes
+    const finalPremisesNotes = isMinibus
+      ? premisesNotes.trim() || null
+      : needAssistance
+      ? assistanceNotes.trim() || null
+      : null;
 
     try {
       const res = await fetch("/api/bookings", {
@@ -124,7 +139,7 @@ export default function BookingDialog({
           subject: subject.trim(),
           start: toUTC(selectedDate, startTime),
           end: toUTC(selectedDate, endTime),
-          premisesNotes: premisesNotes.trim() || null,
+          premisesNotes: finalPremisesNotes,
         }),
       });
 
@@ -221,11 +236,48 @@ export default function BookingDialog({
               </Label>
               <textarea
                 id="bd-premises"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px] focus:outline-none focus:ring-2 focus:ring-ring"
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm min-h-[72px] focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder="e.g. Harrogate Leisure Centre — 12 students — Mr Smith"
                 value={premisesNotes}
                 onChange={(e) => setPremisesNotes(e.target.value)}
               />
+            </div>
+          )}
+
+          {/* Premises assistance — shown for all non-minibus rooms */}
+          {!isMinibus && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setNeedAssistance((v) => !v)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
+                  needAssistance
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">build</span>
+                  Request premises assistance
+                </span>
+                <span className="material-symbols-outlined text-base">
+                  {needAssistance ? "expand_less" : "expand_more"}
+                </span>
+              </button>
+
+              {needAssistance && (
+                <div className="mt-2 space-y-1">
+                  <textarea
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="e.g. Please set up the projector and arrange chairs in a horseshoe layout for 20 people"
+                    value={assistanceNotes}
+                    onChange={(e) => setAssistanceNotes(e.target.value)}
+                  />
+                  <p className="text-label-sm font-label-sm text-on-surface-variant">
+                    Premises staff will receive an email with these details, the room and time.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

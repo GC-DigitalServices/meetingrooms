@@ -18,23 +18,20 @@ export default function Header({ session }: Props) {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-lg">
-          <Link
-            href="/"
-            className="text-on-primary font-medium hover:text-secondary-container transition-colors"
-          >
+          <Link href="/" className="text-on-primary font-medium hover:text-secondary-container transition-colors">
             Rooms
           </Link>
-          <Link
-            href="/bookings"
-            className="text-on-primary font-medium hover:text-secondary-container transition-colors"
-          >
+          <Link href="/bookings" className="text-on-primary font-medium hover:text-secondary-container transition-colors">
             My Bookings
           </Link>
+          <Link href="/minibus" className="text-on-primary/60 font-medium hover:text-secondary-container transition-colors flex items-center gap-1">
+            Minibus
+            <span className="text-[10px] bg-secondary-container text-on-secondary-container px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+              Soon
+            </span>
+          </Link>
           {session.isAdmin && (
-            <Link
-              href="/admin"
-              className="text-on-primary font-medium hover:text-secondary-container transition-colors"
-            >
+            <Link href="/admin" className="text-on-primary font-medium hover:text-secondary-container transition-colors">
               Admin
             </Link>
           )}
