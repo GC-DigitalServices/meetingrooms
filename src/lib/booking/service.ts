@@ -15,6 +15,11 @@ import {
 } from "@/lib/mailer";
 import { getConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import {
+  publishBookingCreated,
+  publishBookingUpdated,
+  publishBookingDeleted,
+} from "@/lib/realtime/publish";
 import type { Booking } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -106,7 +111,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   const lockKey      = bookingLockKey(room.id, room.kind, room.parentRoomId);
   const roomIds      = await familyRoomIds(room);
 
-  return withLock(lockKey, async () => {
+  const booking = await withLock(lockKey, async () => {
     // 3. Conflict check (authoritative inside the lock)
     const existing = await db.booking.findMany({
       where: { roomId: { in: roomIds }, startUtc: { lt: end }, endUtc: { gt: start } },
@@ -132,7 +137,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       ? computePremisesHash({ roomId: room.id, organiserUpn: input.organiserUpn, startUtc: start, endUtc: end, premisesNotes })
       : null;
 
-    const booking = await db.booking.create({
+    const created = await db.booking.create({
       data: {
         graphEventId:      graphEvent.id,
         graphICalUid:      graphEvent.iCalUId,
@@ -153,14 +158,14 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
 
     // Patch BookingId extended property now that we have the real id (fire-and-forget)
     updateGraphEvent(primaryMbox, graphEvent.id, {}).catch((err) =>
-      logger.warn({ err, bookingId: booking.id }, "booking: BookingId patch failed (non-critical)")
+      logger.warn({ err, bookingId: created.id }, "booking: BookingId patch failed (non-critical)")
     );
 
     // 7. Audit
     await writeAudit({
       actor:    input.actor.upn,
       action:   "booking.create",
-      targetId: booking.id,
+      targetId: created.id,
       metadata: {
         roomId:       input.roomId,
         organiserUpn: input.organiserUpn,
@@ -171,14 +176,11 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       },
     });
 
-    // 8. Socket.IO broadcast — Phase 4
-    // TODO: broadcast({ type: "booking.created", roomId: room.id, booking })
-
-    // 9. Premises notification (best-effort, isolated)
+    // 8. Premises notification (best-effort, isolated)
     if (shouldNotifyPremises(room.kind, premisesNotes)) {
       const { PUBLIC_BASE_URL } = getConfig();
       await sendPremisesNotification({
-        bookingId:       booking.id,
+        bookingId:       created.id,
         action:          "CREATE",
         organiserName:   input.organiserName,
         roomDisplayName: room.displayName,
@@ -191,8 +193,15 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       });
     }
 
-    return booking;
+    return created;
   });
+
+  // 9. Socket.IO broadcast (outside the lock — non-blocking, fire-and-forget)
+  publishBookingCreated(booking, room.parentRoomId).catch((err) =>
+    logger.warn({ err, bookingId: booking.id }, "ws: booking.created broadcast failed")
+  );
+
+  return booking;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +234,7 @@ export async function updateBooking(
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
   const roomIds     = await familyRoomIds(room);
 
-  return withLock(lockKey, async () => {
+  const updated = await withLock(lockKey, async () => {
     // Conflict check (exclude this booking)
     const others = await db.booking.findMany({
       where: {
@@ -261,7 +270,7 @@ export async function updateBooking(
       : null;
     const hashChanged = newHash !== existing.premisesNotifyHash;
 
-    const updated = await db.booking.update({
+    const result = await db.booking.update({
       where: { id: bookingId },
       data: {
         subject:           newSubject,
@@ -282,8 +291,6 @@ export async function updateBooking(
       },
     });
 
-    // TODO: broadcast update
-
     if (hashChanged && shouldNotifyPremises(room.kind, newPremisesNotes)) {
       const { PUBLIC_BASE_URL } = getConfig();
       await sendPremisesNotification({
@@ -300,8 +307,15 @@ export async function updateBooking(
       });
     }
 
-    return updated;
+    return result;
   });
+
+  // Socket.IO broadcast (outside the lock — fire-and-forget)
+  publishBookingUpdated(updated, room.parentRoomId).catch((err) =>
+    logger.warn({ err, bookingId }, "ws: booking.updated broadcast failed")
+  );
+
+  return updated;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,8 +356,6 @@ export async function cancelBooking(
       },
     });
 
-    // TODO: broadcast cancel
-
     if (shouldNotifyPremises(room.kind, existing.premisesNotes)) {
       const { PUBLIC_BASE_URL } = getConfig();
       await sendPremisesNotification({
@@ -360,4 +372,9 @@ export async function cancelBooking(
       });
     }
   });
+
+  // Socket.IO broadcast (outside the lock — fire-and-forget)
+  publishBookingDeleted(room.id, bookingId, room.parentRoomId).catch((err) =>
+    logger.warn({ err, bookingId }, "ws: booking.deleted broadcast failed")
+  );
 }

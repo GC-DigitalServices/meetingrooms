@@ -4,6 +4,11 @@ import { graphClient } from "@/lib/graph/client";
 import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
 import { ORGANISER_UPN_PROP_ID } from "@/lib/graph/sync";
 import { logger } from "@/lib/logger";
+import {
+  publishBookingCreated,
+  publishBookingUpdated,
+  publishBookingDeleted,
+} from "@/lib/realtime/publish";
 
 export const runtime = "nodejs";
 
@@ -100,7 +105,17 @@ async function processNotifications(payload: GraphNotificationPayload): Promise<
 }
 
 async function handleDeleted(graphEventId: string): Promise<void> {
+  // Load before deleting so we have roomId and parentRoomId for the broadcast.
+  const existing = await db.booking.findFirst({
+    where: { graphEventId },
+    select: { id: true, roomId: true, room: { select: { parentRoomId: true } } },
+  });
   await db.booking.deleteMany({ where: { graphEventId } });
+  if (existing) {
+    publishBookingDeleted(existing.roomId, existing.id, existing.room.parentRoomId).catch(
+      (err) => logger.warn({ err, graphEventId }, "ws: booking.deleted broadcast failed")
+    );
+  }
 }
 
 async function handleCreatedOrUpdated(
@@ -152,14 +167,23 @@ async function handleCreatedOrUpdated(
     lastSyncedAt: new Date(),
   };
 
+  // parentId for broadcast fan-out: section bookings go to both their channel and parent's.
+  const parentId = sectionToParentId.get(logicalRoomId) ?? null;
+
   // Dedup on iCalUId to handle composite-room bookings arriving as N notifications.
   const existing = await db.booking.findFirst({
     where: { graphICalUid: event.iCalUId },
     select: { id: true },
   });
   if (existing) {
-    await db.booking.update({ where: { id: existing.id }, data });
+    const updated = await db.booking.update({ where: { id: existing.id }, data });
+    publishBookingUpdated(updated, parentId).catch((err) =>
+      logger.warn({ err, bookingId: existing.id }, "ws: booking.updated broadcast failed")
+    );
   } else {
-    await db.booking.create({ data });
+    const created = await db.booking.create({ data });
+    publishBookingCreated(created, parentId).catch((err) =>
+      logger.warn({ err, graphEventId }, "ws: booking.created broadcast failed")
+    );
   }
 }
