@@ -38,12 +38,26 @@ export interface BookingDialogProps {
   roomId: string;
   roomName: string;
   roomKind: string;
-  /** YYYY-MM-DD */
-  date: string;
+  /** YYYY-MM-DD — defaults to today if omitted */
+  date?: string;
   /** HH:mm pre-fill */
   initialStart?: string;
   initialEnd?: string;
   onSuccess?: () => void;
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function minDate(): string {
+  return today();
+}
+
+function maxDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 90);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function BookingDialog({
@@ -57,6 +71,7 @@ export default function BookingDialog({
   initialEnd = "09:30",
   onSuccess,
 }: BookingDialogProps) {
+  const [selectedDate, setSelectedDate] = useState(date ?? today());
   const [startTime, setStartTime] = useState(initialStart);
   const [endTime, setEndTime] = useState(initialEnd);
   const [subject, setSubject] = useState("");
@@ -69,13 +84,14 @@ export default function BookingDialog({
   // Reset state when dialog opens
   useEffect(() => {
     if (open) {
+      setSelectedDate(date ?? today());
       setStartTime(initialStart);
       setEndTime(initialEnd);
       setSubject("");
       setPremisesNotes("");
       setError(null);
     }
-  }, [open, initialStart, initialEnd]);
+  }, [open, date, initialStart, initialEnd]);
 
   // Keep endTime always after startTime
   useEffect(() => {
@@ -107,8 +123,8 @@ export default function BookingDialog({
         body: JSON.stringify({
           roomId,
           subject: subject.trim(),
-          start: toUTC(date, startTime),
-          end: toUTC(date, endTime),
+          start: toUTC(selectedDate, startTime),
+          end: toUTC(selectedDate, endTime),
           premisesNotes: premisesNotes.trim() || null,
         }),
       });
@@ -135,16 +151,22 @@ export default function BookingDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Book {roomName}</DialogTitle>
-          <DialogDescription>
-            {new Date(date).toLocaleDateString("en-GB", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div>
+            <Label htmlFor="bd-date">Date</Label>
+            <input
+              id="bd-date"
+              type="date"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              value={selectedDate}
+              min={minDate()}
+              max={maxDate()}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="bd-start">Start time</Label>

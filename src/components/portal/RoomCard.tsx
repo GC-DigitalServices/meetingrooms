@@ -36,7 +36,6 @@ const EQUIP_ICON: Record<string, React.ReactNode> = {
 export default function RoomCard({ room, bookings, canBook }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const status = computeRoomStatus(bookings);
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <>
@@ -95,7 +94,6 @@ export default function RoomCard({ room, bookings, canBook }: Props) {
           roomId={room.id}
           roomName={room.displayName}
           roomKind={room.kind}
-          date={today}
         />
       )}
     </>
