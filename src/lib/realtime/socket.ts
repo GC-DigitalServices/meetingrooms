@@ -218,13 +218,13 @@ async function handleSubscribe(socket: any, rawIds: unknown[], clientData: Porta
       );
       continue;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     socket.join(`room:${room.id}`);
     clientData.subscribedRooms.add(room.id);
 
     try {
       const snapshot = await computeSnapshot(room.id, clientData);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       socket.emit("message", snapshot);
       logger.info({ upn: clientData.upn, roomId: room.id }, "ws: ws_messages_out snapshot");
     } catch (err) {
@@ -237,7 +237,7 @@ async function handleSubscribe(socket: any, rawIds: unknown[], clientData: Porta
 async function handleUnsubscribe(socket: any, rawIds: unknown[], clientData: PortalClientData) {
   for (const id of rawIds) {
     if (typeof id !== "string") continue;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     socket.leave(`room:${id}`);
     clientData.subscribedRooms.delete(id);
   }

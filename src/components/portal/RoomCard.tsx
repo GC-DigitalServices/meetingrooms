@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Users, MapPin, Projector, Tv, Wifi, Car } from "lucide-react";
+import { Users, MapPin, Projector, Tv, Wifi } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import StatusPill from "./StatusPill";
 import BookingDialog from "./BookingDialog";

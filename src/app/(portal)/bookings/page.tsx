@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { format, isAfter, isBefore, startOfDay } from "date-fns";
+import { format, isAfter, isBefore } from "date-fns";
 import { MapPin, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
