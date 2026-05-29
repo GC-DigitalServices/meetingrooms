@@ -8,16 +8,19 @@ export const runtime = "nodejs";
 // Stores PKCE verifier in Redis keyed by state. TTL 10 minutes.
 const STATE_TTL_S = 600;
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const { PUBLIC_BASE_URL } = getConfig();
   const redirectUri = `${PUBLIC_BASE_URL}/api/auth/callback`;
+
+  // Preserve the intended destination through the OAuth round-trip.
+  const next = new URL(req.url).searchParams.get("next") ?? "/";
 
   const { verifier, challenge } = await getCryptoProvider().generatePkceCodes();
   const state = globalThis.crypto.randomUUID();
 
   await getRedisClient().set(
     `auth:state:${state}`,
-    JSON.stringify({ verifier }),
+    JSON.stringify({ verifier, next }),
     "EX",
     STATE_TTL_S
   );

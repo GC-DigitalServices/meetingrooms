@@ -54,20 +54,20 @@ export async function GET(req: NextRequest): Promise<Response> {
       { error, desc: searchParams.get("error_description") },
       "auth: callback error from Microsoft",
     );
-    return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=${encodeURIComponent(error)}`);
+    return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=${encodeURIComponent(error)}`);
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=missing_params`);
+    return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=missing_params`);
   }
 
   // Validate state + retrieve PKCE verifier
   const stateRaw = await getRedisClient().get(`auth:state:${state}`);
   if (!stateRaw) {
-    return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=invalid_state`);
+    return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=invalid_state`);
   }
   await getRedisClient().del(`auth:state:${state}`);
-  const { verifier } = JSON.parse(stateRaw) as { verifier: string };
+  const { verifier, next } = JSON.parse(stateRaw) as { verifier: string; next?: string };
 
   let accessToken: string;
   try {
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   } catch (err) {
     logger.error({ err }, "auth: token exchange failed");
     console.error("TOKEN EXCHANGE ERROR:", err instanceof Error ? err.message : String(err));
-    return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=token_exchange`);
+    return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=token_exchange`);
   }
 
   // Use delegated token exactly twice, then discard.
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     groupIds = await fetchAllGroupIds(accessToken);
   } catch (err) {
     logger.error({ err }, "auth: graph user fetch failed");
-    return NextResponse.redirect(`${PUBLIC_BASE_URL}/?auth_error=graph_fetch`);
+    return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=graph_fetch`);
   }
   // accessToken is now out of scope and will be GC'd — not stored.
 
@@ -130,7 +130,8 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   logger.info({ upn: me.userPrincipalName, isStaff, isAdmin }, "auth: sign-in success");
 
-  const response = NextResponse.redirect(`${PUBLIC_BASE_URL}/`);
+  const destination = next && next.startsWith("/") ? next : "/";
+  const response = NextResponse.redirect(`${PUBLIC_BASE_URL}${destination}`);
   response.cookies.set("session", sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
