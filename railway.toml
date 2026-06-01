@@ -5,6 +5,6 @@ buildCommand = "pnpm prisma generate && pnpm build"
 [deploy]
 startCommand = "pnpm prisma migrate deploy && pnpm start"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

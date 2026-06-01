@@ -12,25 +12,40 @@ type HealthResult = {
   at: string;
 };
 
+/** Resolves to `value` after `ms` ms — used to race against slow connections. */
+function timeout<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+}
+
 export async function GET(): Promise<NextResponse<HealthResult>> {
   const checks = { postgres: false, redis: false };
   const errors: string[] = [];
 
-  // Postgres
+  // Postgres — 5 s hard timeout so a slow first connection doesn't stall the healthcheck.
   try {
-    await db.$queryRaw`SELECT 1`;
-    checks.postgres = true;
+    const result = await Promise.race([
+      db.$queryRaw`SELECT 1`.then(() => true),
+      timeout(5000, false),
+    ]);
+    if (result) {
+      checks.postgres = true;
+    } else {
+      errors.push("postgres: timed out after 5 s");
+    }
   } catch (err) {
     errors.push(`postgres: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Redis
+  // Redis — 5 s hard timeout.
   try {
-    const pong = await getRedisClient().ping();
+    const pong = await Promise.race([
+      getRedisClient().ping(),
+      timeout(5000, "TIMEOUT"),
+    ]);
     if (pong === "PONG") {
       checks.redis = true;
     } else {
-      errors.push(`redis: unexpected ping response: ${pong}`);
+      errors.push(`redis: ${pong === "TIMEOUT" ? "timed out after 5 s" : `unexpected response: ${pong}`}`);
     }
   } catch (err) {
     errors.push(`redis: ${err instanceof Error ? err.message : String(err)}`);
@@ -38,9 +53,7 @@ export async function GET(): Promise<NextResponse<HealthResult>> {
 
   const ok = checks.postgres && checks.redis;
 
-  // Always return 200 so Railway's liveness healthcheck passes as long as the
-  // app is running. Database connectivity failures are surfaced in the response
-  // body and shown in the admin dashboard status indicator — they do not prevent
-  // the deployment from being marked healthy.
+  // Always 200 — Railway healthcheck passes as long as the app is running.
+  // DB/Redis failures surface in the body and in the admin status indicator.
   return NextResponse.json({ ok, checks, errors, at: new Date().toISOString() }, { status: 200 });
 }
