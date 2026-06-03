@@ -51,6 +51,20 @@ export function getSocketServer(): SocketIOServer {
 }
 
 /** Tears down the server and clears the singleton. Used in tests. */
+/**
+ * Disconnect all active sockets for a given device ID.
+ * Called when an admin revokes a device. No-op if the socket server isn't running.
+ */
+export function disconnectDevice(deviceId: string): void {
+  if (!io) return;
+  io.sockets.sockets.forEach((socket) => {
+    const data = socket.data as ClientData;
+    if (data.type === "device" && data.deviceId === deviceId) {
+      socket.disconnect(true);
+    }
+  });
+}
+
 export function destroySocketServer(): Promise<void> {
   return new Promise((resolve) => {
     if (pingTimer) {
@@ -282,6 +296,8 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
     if (clientData.type === "device") {
       socket.join(`room:${clientData.roomId}`);
 
+      const snapshotRooms: string[] = [clientData.roomId];
+
       if (clientData.scope === "SECTION" && clientData.parentCompositeId) {
         socket.join(`room:${clientData.parentCompositeId}`);
       } else if (clientData.scope === "COMPOSITE") {
@@ -289,12 +305,12 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
           where: { parentRoomId: clientData.roomId },
           select: { id: true },
         });
-        for (const s of sections) socket.join(`room:${s.id}`);
+        for (const s of sections) {
+          socket.join(`room:${s.id}`);
+          // COMPOSITE display needs a per-section snapshot to render status cards
+          snapshotRooms.push(s.id);
+        }
       }
-
-      // Send one snapshot per unique room this device is responsible for.
-      const snapshotRooms: string[] = [clientData.roomId];
-      if (clientData.parentCompositeId) snapshotRooms.push(clientData.parentCompositeId);
 
       for (const roomId of snapshotRooms) {
         try {
@@ -303,6 +319,22 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
           logger.error({ err, roomId }, "ws: device snapshot failed");
         }
       }
+
+      // Heartbeat handler — update lastSeenAt in the background
+      socket.on("message", (msg: unknown) => {
+        if (
+          msg &&
+          typeof msg === "object" &&
+          (msg as { type?: string }).type === "heartbeat"
+        ) {
+          db.device
+            .update({
+              where: { id: (clientData as DeviceClientData).deviceId },
+              data: { lastSeenAt: new Date() },
+            })
+            .catch(() => {});
+        }
+      });
     } else {
       socket.on("message", async (msg: unknown) => {
         logger.info(

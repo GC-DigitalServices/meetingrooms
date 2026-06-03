@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Paths that never require a session.
+// Paths that never require a session cookie.
+// API routes that use device-token auth handle auth in the route handler.
 const PUBLIC_PREFIXES = [
   "/sign-in",
   "/api/auth/",
   "/api/health",
+  "/api/qr",
+  "/api/devices/",   // device-auth'd routes handle their own auth
+  "/display",        // device-token auth, no session cookie
   "/_next/",
   "/favicon.ico",
 ];

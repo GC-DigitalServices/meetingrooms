@@ -1,8 +1,9 @@
-// iPad display — full-screen status view added in Phase 6.
+import DisplayClient from "./DisplayClient";
+
+// The server component is a thin wrapper. All display logic lives in the
+// client component (device token stored in localStorage, socket auth).
+export const runtime = "nodejs";
+
 export default function DisplayPage() {
-  return (
-    <main>
-      <p>Display — coming in Phase 6.</p>
-    </main>
-  );
+  return <DisplayClient />;
 }

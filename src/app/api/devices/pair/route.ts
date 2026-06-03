@@ -1,0 +1,68 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireSession, AuthError } from "@/lib/auth";
+import { db } from "@/lib/db/client";
+import { getRedisClient } from "@/lib/realtime/redis";
+import { getConfig } from "@/lib/config";
+import { z } from "zod";
+import crypto from "crypto";
+
+export const runtime = "nodejs";
+
+const PairSchema = z.object({
+  roomId: z.string().min(1),
+  scope: z.enum(["STANDARD", "SECTION", "COMPOSITE"]),
+  name: z.string().max(100).optional(),
+});
+
+/**
+ * POST /api/devices/pair — admin generates a 6-digit pairing code.
+ * The code is stored in Redis with a 10-minute TTL and is single-use.
+ */
+export async function POST(req: NextRequest): Promise<Response> {
+  let session;
+  try {
+    session = await requireSession(req);
+  } catch (err) {
+    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    throw err;
+  }
+  if (!session.isAdmin) return NextResponse.json({ error: "Admin required" }, { status: 403 });
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const parsed = PairSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { roomId, scope, name } = parsed.data;
+
+  const room = await db.room.findUnique({ where: { id: roomId }, select: { id: true, displayName: true } });
+  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+
+  // 6-digit code, zero-padded, cryptographically random
+  const code = String(crypto.randomInt(100000, 999999));
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await getRedisClient().set(
+    `device:pair:${code}`,
+    JSON.stringify({ roomId, scope, name: name ?? null }),
+    "EX",
+    600,
+  );
+
+  const { PUBLIC_BASE_URL } = getConfig();
+  const enrollUrl = `${PUBLIC_BASE_URL}/display/enroll?code=${code}`;
+
+  return NextResponse.json({
+    code,
+    expiresAt: expiresAt.toISOString(),
+    enrollUrl,
+    roomName: room.displayName,
+  });
+}
