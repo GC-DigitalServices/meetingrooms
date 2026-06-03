@@ -40,7 +40,7 @@ interface DeviceInfo {
 type ConnectionStatus = "init" | "connecting" | "live" | "offline";
 
 // ---------------------------------------------------------------------------
-// Booking state reducer — keyed by roomId
+// Booking state reducer
 // ---------------------------------------------------------------------------
 
 type BookingsMap = Map<string, BookingSlot[]>;
@@ -91,10 +91,7 @@ export interface StatusInfo {
   status: RoomStatus;
   current?: BookingSlot;
   next?: BookingSlot;
-  /** Minutes until next booking starts (SOON only) */
   minsUntilBusy?: number;
-  /** Formatted "until HH:MM" string (BUSY) or "from HH:MM" string (FREE/SOON) */
-  timeLabel?: string;
 }
 
 function formatTime(iso: string): string {
@@ -103,6 +100,14 @@ function formatTime(iso: string): string {
     minute: "2-digit",
     timeZone: "Europe/London",
   }).format(new Date(iso));
+}
+
+function formatClock(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  }).format(date);
 }
 
 export function computeStatus(bookings: BookingSlot[], now: Date): StatusInfo {
@@ -116,12 +121,7 @@ export function computeStatus(bookings: BookingSlot[], now: Date): StatusInfo {
 
   if (current) {
     const nextAfter = sorted.find((b) => new Date(b.startUtc) >= new Date(current.endUtc));
-    return {
-      status: "BUSY",
-      current,
-      next: nextAfter,
-      timeLabel: `Until ${formatTime(current.endUtc)}`,
-    };
+    return { status: "BUSY", current, next: nextAfter };
   }
 
   const upcoming = sorted.filter((b) => new Date(b.startUtc) > now);
@@ -132,38 +132,110 @@ export function computeStatus(bookings: BookingSlot[], now: Date): StatusInfo {
       (new Date(next.startUtc).getTime() - now.getTime()) / 60000,
     );
     if (minsUntil <= 15) {
-      return {
-        status: "SOON",
-        next,
-        minsUntilBusy: minsUntil,
-        timeLabel: `From ${formatTime(next.startUtc)}`,
-      };
+      return { status: "SOON", next, minsUntilBusy: minsUntil };
     }
-    return {
-      status: "FREE",
-      next,
-      timeLabel: `Free until ${formatTime(next.startUtc)}`,
-    };
+    return { status: "FREE", next };
   }
 
-  return { status: "FREE", timeLabel: "Free all day" };
+  return { status: "FREE" };
 }
 
 // ---------------------------------------------------------------------------
-// QR image component
+// Theme per status
 // ---------------------------------------------------------------------------
 
-function QrImage({ url, size = 200 }: { url: string; size?: number }) {
-  const src = `/api/qr?data=${encodeURIComponent(url)}`;
+const STATUS_THEME = {
+  FREE: {
+    bg: "#00534C",
+    dot: "#4ade80",
+    label: "Available",
+    labelBg: "rgba(74,222,128,0.15)",
+    labelText: "#4ade80",
+  },
+  BUSY: {
+    bg: "#7f1d1d",
+    dot: "#fca5a5",
+    label: "In use",
+    labelBg: "rgba(252,165,165,0.15)",
+    labelText: "#fca5a5",
+  },
+  SOON: {
+    bg: "#78350f",
+    dot: "#fcd34d",
+    label: "Starting soon",
+    labelBg: "rgba(252,211,77,0.15)",
+    labelText: "#fcd34d",
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Shared chrome components
+// ---------------------------------------------------------------------------
+
+const LOGO_URL = "https://www.greenhead.ac.uk/assets/images/global/logo.png";
+
+function DisplayHeader({ time, connectionStatus }: { time: string; connectionStatus: ConnectionStatus }) {
   return (
-    <img
-      src={src}
-      alt="Scan to book"
-      width={size}
-      height={size}
-      className="rounded-lg"
-      style={{ imageRendering: "pixelated" }}
-    />
+    <div className="flex items-center justify-between px-10 pt-8 pb-6">
+      {/* Logo */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={LOGO_URL} alt="Greenhead College" className="h-10 object-contain" />
+
+      {/* Clock + status */}
+      <div className="flex items-center gap-4">
+        {connectionStatus !== "live" && connectionStatus !== "init" && (
+          <div className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-sm text-white/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
+            {connectionStatus === "offline" ? "Offline" : "Reconnecting…"}
+          </div>
+        )}
+        <div className="text-right font-mono text-5xl font-light tracking-tight text-white/90">
+          {time}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: RoomStatus }) {
+  const theme = STATUS_THEME[status];
+  return (
+    <div
+      className="inline-flex items-center gap-2.5 rounded-full px-5 py-2 text-lg font-semibold"
+      style={{ backgroundColor: theme.labelBg, color: theme.labelText }}
+    >
+      <span
+        className="h-2.5 w-2.5 rounded-full"
+        style={{ backgroundColor: theme.dot, boxShadow: `0 0 8px ${theme.dot}` }}
+      />
+      {theme.label}
+    </div>
+  );
+}
+
+function QrCard({ qrUrl, caption }: { qrUrl: string | null; caption: string }) {
+  if (!qrUrl) return null;
+  const imgSrc = `/api/qr?data=${encodeURIComponent(qrUrl)}`;
+  const displayPath = (() => {
+    try { return new URL(qrUrl).pathname; } catch { return ""; }
+  })();
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="rounded-2xl bg-white p-4 shadow-2xl">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imgSrc}
+          alt="Scan to book"
+          width={200}
+          height={200}
+          className="block"
+          style={{ imageRendering: "pixelated" }}
+        />
+      </div>
+      <p className="text-base font-medium text-white/80">{caption}</p>
+      <p className="font-mono text-sm text-white/40">{displayPath.split("?")[0]}</p>
+    </div>
   );
 }
 
@@ -176,88 +248,101 @@ function StandardLayout({
   statusInfo,
   qrUrl,
   now,
+  connectionStatus,
 }: {
   room: RoomInfo;
   statusInfo: StatusInfo;
   qrUrl: string | null;
   now: Date;
+  connectionStatus: ConnectionStatus;
 }) {
-  const { status, current, next, minsUntilBusy, timeLabel } = statusInfo;
+  const { status, current, next, minsUntilBusy } = statusInfo;
+  const theme = STATUS_THEME[status];
 
-  const bgColor =
-    status === "FREE"
-      ? "var(--status-free)"
-      : status === "SOON"
-        ? "var(--status-soon)"
-        : "var(--status-busy)";
-
-  const subject =
-    current?.visibility === "full" ? current.subject : current ? "Busy" : undefined;
-  const organiser =
-    current?.visibility === "full" ? current.organiserName : undefined;
+  const subject = current?.visibility === "full" ? current.subject : current ? "Busy" : undefined;
+  const organiser = current?.visibility === "full" ? current.organiserName : undefined;
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-between p-10 text-white transition-colors duration-200"
-      style={{ backgroundColor: bgColor }}
+      className="flex min-h-screen flex-col text-white transition-colors duration-500"
+      style={{ backgroundColor: theme.bg }}
     >
-      {/* Top — room name */}
-      <div className="text-center mt-8">
-        <div className="text-7xl font-bold tracking-tight leading-tight">{room.displayName}</div>
-        <div className="text-2xl mt-2 opacity-80">
-          {room.capacity > 0 && `Capacity: ${room.capacity}`}
+      <DisplayHeader time={formatClock(now)} connectionStatus={connectionStatus} />
+
+      {/* Divider */}
+      <div className="mx-10 h-px bg-white/10" />
+
+      {/* Main content */}
+      <div className="flex flex-1 flex-col items-center justify-between px-10 py-10">
+
+        {/* Room name + status */}
+        <div className="flex flex-col items-center gap-5 text-center">
+          <StatusBadge status={status} />
+          <h1 className="text-7xl font-bold leading-tight tracking-tight">
+            {room.displayName}
+          </h1>
+          {room.capacity > 0 && (
+            <p className="text-xl text-white/50">
+              Capacity: {room.capacity}
+            </p>
+          )}
         </div>
-      </div>
 
-      {/* Middle — status info */}
-      <div className="text-center space-y-3">
-        {status === "BUSY" && (
-          <>
-            {subject && <div className="text-4xl font-semibold">{subject}</div>}
-            {organiser && <div className="text-2xl opacity-90">{organiser}</div>}
-            {timeLabel && <div className="text-3xl font-light">{timeLabel}</div>}
-            {next && (
-              <div className="text-xl opacity-70 mt-2">
-                Next free: {formatTime(next.startUtc)}
-              </div>
-            )}
-          </>
-        )}
-        {status === "SOON" && (
-          <>
-            <div className="text-5xl font-bold">
-              {minsUntilBusy === 0 ? "Now" : `${minsUntilBusy} min${minsUntilBusy === 1 ? "" : "s"}`}
-            </div>
-            <div className="text-2xl opacity-90">until next booking</div>
-            {next?.visibility === "full" && next.subject && (
-              <div className="text-xl opacity-80">{next.subject}</div>
-            )}
-            {timeLabel && <div className="text-2xl font-light">{timeLabel}</div>}
-          </>
-        )}
-        {status === "FREE" && (
-          <div className="text-4xl font-light">{timeLabel}</div>
-        )}
-      </div>
+        {/* Status details */}
+        <div className="flex flex-col items-center gap-3 text-center">
+          {status === "BUSY" && (
+            <>
+              {subject && (
+                <p className="text-4xl font-semibold">{subject}</p>
+              )}
+              {organiser && (
+                <p className="text-2xl text-white/70">{organiser}</p>
+              )}
+              {current && (
+                <p className="text-2xl font-light text-white/80">
+                  Until {formatTime(current.endUtc)}
+                </p>
+              )}
+              {next && (
+                <p className="mt-1 text-lg text-white/50">
+                  Next free: {formatTime(current!.endUtc)}
+                </p>
+              )}
+            </>
+          )}
 
-      {/* Bottom — QR code */}
-      <div className="flex flex-col items-center gap-4 mb-8">
-        {qrUrl ? (
-          <div className="bg-white p-4 rounded-2xl shadow-xl">
-            <QrImage url={qrUrl} size={220} />
-          </div>
-        ) : (
-          <div className="bg-white/20 rounded-2xl p-6 text-center">
-            <div className="text-lg opacity-80">Scan QR to book</div>
-          </div>
-        )}
-        <div className="text-lg opacity-75 font-light">Scan to book this room</div>
-        {/* Fallback URL for users who can't scan */}
-        {qrUrl && (
-          <div className="text-sm opacity-50 font-mono">
-            {new URL(qrUrl).pathname.split("?")[0]}
-          </div>
-        )}
+          {status === "SOON" && (
+            <>
+              <p className="text-5xl font-bold" style={{ color: theme.dot }}>
+                {minsUntilBusy === 0 ? "Now" : `${minsUntilBusy} min${minsUntilBusy === 1 ? "" : "s"}`}
+              </p>
+              <p className="text-2xl text-white/70">until next booking</p>
+              {next?.visibility === "full" && next.subject && (
+                <p className="text-xl text-white/60">{next.subject}</p>
+              )}
+              {next && (
+                <p className="text-xl font-light text-white/60">
+                  From {formatTime(next.startUtc)}
+                </p>
+              )}
+            </>
+          )}
+
+          {status === "FREE" && (
+            <>
+              {next ? (
+                <p className="text-2xl font-light text-white/70">
+                  Free until {formatTime(next.startUtc)}
+                </p>
+              ) : (
+                <p className="text-2xl font-light text-white/70">Free all day</p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* QR code */}
+        <QrCard qrUrl={qrUrl} caption="Scan to book this room" />
       </div>
     </div>
   );
@@ -277,36 +362,38 @@ function SectionCard({
   now: Date;
 }) {
   const info = computeStatus(bookings, now);
-  const bgColor =
-    info.status === "FREE"
-      ? "var(--status-free)"
-      : info.status === "SOON"
-        ? "var(--status-soon)"
-        : "var(--status-busy)";
-
+  const theme = STATUS_THEME[info.status];
   const subject =
     info.current?.visibility === "full" ? info.current.subject : info.current ? "Busy" : undefined;
 
   return (
     <div
-      className="flex-1 rounded-2xl p-6 text-white flex flex-col justify-between min-h-0 transition-colors duration-200"
-      style={{ backgroundColor: bgColor }}
+      className="flex flex-1 flex-col justify-between rounded-2xl p-7 text-white transition-colors duration-500"
+      style={{ backgroundColor: theme.bg }}
     >
-      <div className="text-3xl font-bold">{section.displayName}</div>
-      <div>
+      <div className="flex items-start justify-between">
+        <h2 className="text-3xl font-bold">{section.displayName}</h2>
+        <StatusBadge status={info.status} />
+      </div>
+
+      <div className="mt-4 space-y-1">
         {info.status === "BUSY" && (
           <>
-            {subject && <div className="text-xl font-medium mt-2">{subject}</div>}
-            {info.timeLabel && <div className="text-lg opacity-80 mt-1">{info.timeLabel}</div>}
+            {subject && <p className="text-xl font-medium">{subject}</p>}
+            {info.current && (
+              <p className="text-lg text-white/70">Until {formatTime(info.current.endUtc)}</p>
+            )}
           </>
         )}
         {info.status === "SOON" && (
-          <div className="text-lg opacity-90 mt-2">
+          <p className="text-lg text-white/80">
             Busy in {info.minsUntilBusy} min
-          </div>
+          </p>
         )}
         {info.status === "FREE" && (
-          <div className="text-lg opacity-80 mt-2">{info.timeLabel}</div>
+          <p className="text-lg text-white/70">
+            {info.next ? `Free until ${formatTime(info.next.startUtc)}` : "Free all day"}
+          </p>
         )}
       </div>
     </div>
@@ -318,70 +405,77 @@ function CompositeLayout({
   bookingsMap,
   qrUrl,
   now,
+  connectionStatus,
 }: {
   room: RoomInfo;
   bookingsMap: BookingsMap;
   qrUrl: string | null;
   now: Date;
+  connectionStatus: ConnectionStatus;
 }) {
   const sectionCount = room.sections.length;
   const gridClass =
-    sectionCount === 2
-      ? "flex flex-col gap-4"
-      : sectionCount === 3
-        ? "grid grid-cols-3 gap-4"
-        : "grid grid-cols-2 gap-4"; // 4 sections
+    sectionCount <= 2 ? "flex flex-col gap-4" :
+    sectionCount === 3 ? "grid grid-cols-3 gap-4" :
+    "grid grid-cols-2 gap-4";
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col p-6 gap-5">
-      {/* Header */}
-      <div className="flex items-center justify-between px-2">
-        <div className="text-4xl font-bold">{room.displayName}</div>
-        <div className="flex flex-col items-end gap-2">
-          {qrUrl ? (
-            <div className="bg-white p-3 rounded-xl">
-              <QrImage url={qrUrl} size={140} />
-            </div>
-          ) : (
-            <div className="bg-white/10 rounded-xl p-4 text-center text-sm opacity-60">
-              QR loading
-            </div>
-          )}
-          <div className="text-sm opacity-60 text-right">Scan to book any section or the whole room</div>
-        </div>
-      </div>
+    <div
+      className="flex min-h-screen flex-col text-white"
+      style={{ backgroundColor: "#00534C" }}
+    >
+      <DisplayHeader time={formatClock(now)} connectionStatus={connectionStatus} />
+      <div className="mx-10 h-px bg-white/10" />
 
-      {/* Section cards */}
-      <div className={`flex-1 ${gridClass} min-h-0`}>
-        {room.sections.map((section) => (
-          <SectionCard
-            key={section.id}
-            section={section}
-            bookings={bookingsMap.get(section.id) ?? []}
-            now={now}
-          />
-        ))}
+      <div className="flex flex-1 gap-8 px-10 py-8">
+        {/* Section cards */}
+        <div className={`flex-1 ${gridClass}`}>
+          {room.sections.map((section) => (
+            <SectionCard
+              key={section.id}
+              section={section}
+              bookings={bookingsMap.get(section.id) ?? []}
+              now={now}
+            />
+          ))}
+        </div>
+
+        {/* Right panel — room name + QR */}
+        <div className="flex w-72 flex-col items-center justify-between">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold leading-tight">{room.displayName}</h1>
+            <p className="mt-2 text-base text-white/50">Scan to book any section or the whole room</p>
+          </div>
+          <QrCard qrUrl={qrUrl} caption="Scan to book" />
+        </div>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Offline banner
+// Error / loading screens
 // ---------------------------------------------------------------------------
 
-function OfflineBanner({ status }: { status: ConnectionStatus }) {
-  if (status === "live") return null;
-  const msg =
-    status === "offline"
-      ? "Offline — showing last known state"
-      : status === "connecting"
-        ? "Reconnecting…"
-        : null;
-  if (!msg) return null;
+function FullScreenMessage({
+  icon,
+  title,
+  body,
+}: {
+  icon: string;
+  title: string;
+  body?: string;
+}) {
   return (
-    <div className="fixed bottom-4 right-4 bg-black/70 text-white text-sm px-4 py-2 rounded-full z-50">
-      {msg}
+    <div
+      className="flex min-h-screen flex-col items-center justify-center gap-6 p-10 text-white"
+      style={{ backgroundColor: "#00534C" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={LOGO_URL} alt="Greenhead College" className="mb-4 h-10 object-contain opacity-60" />
+      <div className="text-5xl">{icon}</div>
+      <h1 className="text-2xl font-semibold">{title}</h1>
+      {body && <p className="max-w-sm text-center text-base text-white/60">{body}</p>}
     </div>
   );
 }
@@ -406,89 +500,48 @@ export default function DisplayClient() {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ----------
   // 1-second clock
-  // ----------
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // ----------
   // Read token from localStorage
-  // ----------
   useEffect(() => {
-    const token = localStorage.getItem("device_token");
-    setDeviceToken(token);
+    setDeviceToken(localStorage.getItem("device_token"));
   }, []);
 
-  // ----------
   // Fetch room info
-  // ----------
   useEffect(() => {
     if (!deviceToken) return;
-
-    fetch("/api/devices/me", {
-      headers: { Authorization: `Bearer ${deviceToken}` },
-    })
+    fetch("/api/devices/me", { headers: { Authorization: `Bearer ${deviceToken}` } })
       .then(async (res) => {
-        if (!res.ok) {
-          const body = (await res.json()) as { error?: string };
-          throw new Error(body.error ?? "Failed to load device info");
-        }
+        if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? "Failed");
         return res.json() as Promise<{ device: DeviceInfo; room: RoomInfo }>;
       })
-      .then(({ device, room }) => {
-        setDeviceInfo(device);
-        setRoomInfo(room);
-      })
-      .catch((err) => {
-        setInitError(err instanceof Error ? err.message : "Unknown error");
-      });
+      .then(({ device, room }) => { setDeviceInfo(device); setRoomInfo(room); })
+      .catch((err) => setInitError(err instanceof Error ? err.message : "Unknown error"));
   }, [deviceToken]);
 
-  // ----------
-  // QR token fetcher — refresh every 90s
-  // ----------
+  // QR token fetcher — refresh every 90 s
   const fetchQrToken = useCallback(() => {
     if (!deviceToken) return;
-
-    fetch("/api/devices/qr-token", {
-      headers: { Authorization: `Bearer ${deviceToken}` },
-    })
-      .then(async (res) => {
-        if (!res.ok) return;
-        return res.json() as Promise<{ token: string; expiresAt: string }>;
-      })
-      .then((data) => {
-        if (!data) return;
-        setQrToken(data.token);
-        setQrExpiresAt(new Date(data.expiresAt));
-      })
-      .catch(() => {
-        // Keep showing last QR until it expires
-        if (qrExpiresAt && qrExpiresAt < new Date()) {
-          setQrToken(null);
-        }
-      });
-
+    fetch("/api/devices/qr-token", { headers: { Authorization: `Bearer ${deviceToken}` } })
+      .then(async (res) => { if (!res.ok) return; return res.json() as Promise<{ token: string; expiresAt: string }>; })
+      .then((data) => { if (!data) return; setQrToken(data.token); setQrExpiresAt(new Date(data.expiresAt)); })
+      .catch(() => { if (qrExpiresAt && qrExpiresAt < new Date()) setQrToken(null); });
     qrTimerRef.current = setTimeout(fetchQrToken, 90_000);
   }, [deviceToken, qrExpiresAt]);
 
   useEffect(() => {
     if (!deviceToken || !roomInfo) return;
     fetchQrToken();
-    return () => {
-      if (qrTimerRef.current) clearTimeout(qrTimerRef.current);
-    };
+    return () => { if (qrTimerRef.current) clearTimeout(qrTimerRef.current); };
   }, [deviceToken, roomInfo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ----------
   // Socket.IO connection
-  // ----------
   useEffect(() => {
     if (!deviceToken || !roomInfo) return;
-
     setConnectionStatus("connecting");
 
     const socket = io({ path: "/ws", auth: { token: deviceToken }, transports: ["websocket"] });
@@ -496,10 +549,7 @@ export default function DisplayClient() {
 
     socket.on("connect", () => {
       setConnectionStatus("live");
-      if (offlineTimerRef.current) {
-        clearTimeout(offlineTimerRef.current);
-        offlineTimerRef.current = null;
-      }
+      if (offlineTimerRef.current) { clearTimeout(offlineTimerRef.current); offlineTimerRef.current = null; }
     });
 
     socket.on("disconnect", () => {
@@ -510,29 +560,18 @@ export default function DisplayClient() {
     socket.on("message", (msg: { type: string; payload: Record<string, unknown> }) => {
       const p = msg.payload;
       if (msg.type === "snapshot") {
-        dispatch({
-          type: "SNAPSHOT",
-          roomId: p.roomId as string,
-          bookings: p.bookings as BookingSlot[],
-        });
+        dispatch({ type: "SNAPSHOT", roomId: p.roomId as string, bookings: p.bookings as BookingSlot[] });
         setConnectionStatus("live");
       } else if (msg.type === "booking.created") {
         dispatch({ type: "ADD", booking: p.booking as BookingSlot });
       } else if (msg.type === "booking.updated") {
         dispatch({ type: "UPDATE", booking: p.booking as BookingSlot });
       } else if (msg.type === "booking.deleted") {
-        dispatch({
-          type: "DELETE",
-          roomId: p.roomId as string,
-          bookingId: p.bookingId as string,
-        });
+        dispatch({ type: "DELETE", roomId: p.roomId as string, bookingId: p.bookingId as string });
       }
     });
 
-    // Heartbeat — updates Device.lastSeenAt server-side
-    heartbeatRef.current = setInterval(() => {
-      socket.emit("message", { type: "heartbeat" });
-    }, 60_000);
+    heartbeatRef.current = setInterval(() => socket.emit("message", { type: "heartbeat" }), 60_000);
 
     return () => {
       socket.disconnect();
@@ -541,83 +580,68 @@ export default function DisplayClient() {
     };
   }, [deviceToken, roomInfo]);
 
-  // ----------
   // Not paired
-  // ----------
   if (!deviceToken) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center p-8">
-        <div className="text-center space-y-4 max-w-sm">
-          <div className="text-4xl">📱</div>
-          <div className="text-2xl font-light">Display not paired</div>
-          <div className="text-sm text-gray-400">
-            Ask your administrator to generate a pairing code, then navigate to the enrolment URL on
-            this device.
-          </div>
-        </div>
-      </main>
+      <FullScreenMessage
+        icon="📱"
+        title="Display not paired"
+        body="Ask your administrator to generate a pairing code, then navigate to the enrolment URL on this device."
+      />
     );
   }
 
   if (initError) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center p-8">
-        <div className="text-center space-y-4 max-w-sm">
-          <div className="text-red-400 text-xl">Display error</div>
-          <div className="text-sm text-gray-300">{initError}</div>
-          <div className="text-xs text-gray-500">
-            The device token may have been revoked. Re-pair this display from the admin portal.
-          </div>
-        </div>
-      </main>
+      <FullScreenMessage
+        icon="⚠️"
+        title="Display error"
+        body={`${initError} — The device token may have been revoked. Re-pair this display from the admin portal.`}
+      />
     );
   }
 
   if (!roomInfo || !deviceInfo) {
     return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-gray-400 text-xl">Loading…</div>
-      </main>
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ backgroundColor: "#00534C" }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={LOGO_URL} alt="Greenhead College" className="h-10 animate-pulse object-contain opacity-60" />
+      </div>
     );
   }
 
-  // ----------
   // Build QR URL
-  // ----------
-  const baseUrl =
-    typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
-  const qrUrl = qrToken
+  const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
+  const qrValid = qrExpiresAt ? qrExpiresAt > now : false;
+  const effectiveQrUrl = qrValid && qrToken
     ? `${baseUrl}/r/${roomInfo.id}?from=display&t=${encodeURIComponent(qrToken)}`
     : null;
 
-  // QR expired?
-  const qrValid = qrExpiresAt ? qrExpiresAt > now : false;
-  const effectiveQrUrl = qrValid ? qrUrl : null;
-
-  // ----------
-  // Render layout
-  // ----------
   const bookings = bookingsMap.get(roomInfo.id) ?? [];
   const statusInfo = computeStatus(bookings, now);
 
+  if (deviceInfo.scope === "COMPOSITE") {
+    return (
+      <CompositeLayout
+        room={roomInfo}
+        bookingsMap={bookingsMap}
+        qrUrl={effectiveQrUrl}
+        now={now}
+        connectionStatus={connectionStatus}
+      />
+    );
+  }
+
   return (
-    <>
-      {deviceInfo.scope === "COMPOSITE" ? (
-        <CompositeLayout
-          room={roomInfo}
-          bookingsMap={bookingsMap}
-          qrUrl={effectiveQrUrl}
-          now={now}
-        />
-      ) : (
-        <StandardLayout
-          room={roomInfo}
-          statusInfo={statusInfo}
-          qrUrl={effectiveQrUrl}
-          now={now}
-        />
-      )}
-      <OfflineBanner status={connectionStatus} />
-    </>
+    <StandardLayout
+      room={roomInfo}
+      statusInfo={statusInfo}
+      qrUrl={effectiveQrUrl}
+      now={now}
+      connectionStatus={connectionStatus}
+    />
   );
 }
