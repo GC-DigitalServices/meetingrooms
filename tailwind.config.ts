@@ -12,8 +12,8 @@ const config: Config = {
     extend: {
       // ─── Greenhead College brand colours (Material You) ───────────────────
       colors: {
-        // Core brand
-        primary: "#003a35",
+        // Core brand — DEFAULT used by bg-primary, foreground by text-primary-foreground
+        primary: { DEFAULT: "#003a35", foreground: "#ffffff" },
         "on-primary": "#ffffff",
         "primary-container": "#00534c",
         "on-primary-container": "#83c5bc",
@@ -25,7 +25,7 @@ const config: Config = {
         "surface-tint": "#246961",
 
         // Secondary (amber / CTA)
-        secondary: "#855300",
+        secondary: { DEFAULT: "#855300", foreground: "#ffffff" },
         "on-secondary": "#ffffff",
         "secondary-container": "#f9a000",
         "on-secondary-container": "#633d00",
