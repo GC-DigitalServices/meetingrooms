@@ -216,8 +216,12 @@ function StatusBadge({ status }: { status: RoomStatus }) {
 function QrCard({ qrUrl, caption }: { qrUrl: string | null; caption: string }) {
   if (!qrUrl) return null;
   const imgSrc = `/api/qr?data=${encodeURIComponent(qrUrl)}`;
+  // Strip the scheme (including non-standard microsoft-edge-https://) to get the path
   const displayPath = (() => {
-    try { return new URL(qrUrl).pathname; } catch { return ""; }
+    try {
+      const normalized = qrUrl.replace(/^microsoft-edge-/, "");
+      return new URL(normalized).pathname;
+    } catch { return ""; }
   })();
 
   return (
@@ -613,11 +617,12 @@ export default function DisplayClient() {
     );
   }
 
-  // Build QR URL
-  const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
+  // Build QR URL — microsoft-edge-https:// scheme forces the link to open
+  // directly in Edge when scanned. Requires Edge installed on the device.
+  const host = typeof window !== "undefined" ? window.location.host : "";
   const qrValid = qrExpiresAt ? qrExpiresAt > now : false;
   const effectiveQrUrl = qrValid && qrToken
-    ? `${baseUrl}/r/${roomInfo.id}?from=display&t=${encodeURIComponent(qrToken)}`
+    ? `microsoft-edge-https://${host}/r/${roomInfo.id}?from=display&t=${encodeURIComponent(qrToken)}`
     : null;
 
   const bookings = bookingsMap.get(roomInfo.id) ?? [];
