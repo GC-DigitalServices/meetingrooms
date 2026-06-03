@@ -238,7 +238,19 @@ function QrCard({ qrUrl, caption }: { qrUrl: string | null; caption: string }) {
         />
       </div>
       <p className="text-base font-medium text-white/80">{caption}</p>
-      <p className="font-mono text-sm text-white/40">{displayPath.split("?")[0]}</p>
+
+      {/* Edge requirement notice */}
+      <div className="mt-1 rounded-xl bg-white/10 px-5 py-3 text-center max-w-xs">
+        <p className="text-sm font-medium text-white/90">
+          📱 Requires <strong>Microsoft Edge</strong> on your device
+        </p>
+        <p className="mt-1 text-xs text-white/60">
+          No Edge? Book from a college PC or laptop at
+        </p>
+        <p className="mt-0.5 font-mono text-xs font-semibold text-white/80">
+          meetingrooms.greenhead.digital
+        </p>
+      </div>
     </div>
   );
 }
