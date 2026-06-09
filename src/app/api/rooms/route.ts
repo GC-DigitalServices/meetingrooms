@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, AuthError } from "@/lib/auth";
 import { canSeeRoom } from "@/lib/booking/visibility";
 import { db } from "@/lib/db/client";
+import { apiError } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     session = await requireSession(req);
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
   }
 

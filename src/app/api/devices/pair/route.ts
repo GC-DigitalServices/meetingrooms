@@ -3,6 +3,7 @@ import { requireSession, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { getRedisClient } from "@/lib/realtime/redis";
 import { getConfig } from "@/lib/config";
+import { apiError } from "@/lib/api/errors";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -23,29 +24,28 @@ export async function POST(req: NextRequest): Promise<Response> {
   try {
     session = await requireSession(req);
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
   }
-  if (!session.isAdmin) return NextResponse.json({ error: "Admin required" }, { status: 403 });
+  if (!session.isAdmin) return apiError("FORBIDDEN", "Admin required");
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid request body");
   }
 
   const parsed = PairSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Validation failed", { details: parsed.error.flatten() });
   }
 
   const { roomId, scope, name } = parsed.data;
 
   const room = await db.room.findUnique({ where: { id: roomId }, select: { id: true, displayName: true } });
-  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
+  if (!room) return apiError("NOT_FOUND", "Room not found");
 
-  // 6-digit code, zero-padded, cryptographically random
   const code = String(crypto.randomInt(100000, 999999));
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 

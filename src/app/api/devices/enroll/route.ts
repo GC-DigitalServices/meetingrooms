@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRedisClient } from "@/lib/realtime/redis";
 import { db } from "@/lib/db/client";
+import { apiError } from "@/lib/api/errors";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -19,12 +20,12 @@ export async function POST(req: NextRequest): Promise<Response> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid request body");
   }
 
   const parsed = EnrollSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid pairing code format" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid pairing code format");
   }
 
   const { code } = parsed.data;
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const raw = await redis.get(`device:pair:${code}`);
 
   if (!raw) {
-    return NextResponse.json({ error: "Invalid or expired pairing code" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid or expired pairing code");
   }
 
   const { roomId, scope, name } = JSON.parse(raw) as {
@@ -44,7 +45,6 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Single-use: delete before responding so a retry with the same code fails
   await redis.del(`device:pair:${code}`);
 
-  // 256-bit random token; stored as SHA-256 hash (SHA-256 is fine for high-entropy random inputs)
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 

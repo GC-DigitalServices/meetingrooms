@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth, DeviceAuthError } from "@/lib/auth/device";
 import { db } from "@/lib/db/client";
+import { apiError } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -14,8 +15,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     device = await requireDeviceAuth(req);
   } catch (err) {
-    if (err instanceof DeviceAuthError)
-      return NextResponse.json({ error: err.message }, { status: 401 });
+    if (err instanceof DeviceAuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
   }
 

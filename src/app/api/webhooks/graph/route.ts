@@ -5,6 +5,7 @@ import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
 import { ORGANISER_UPN_PROP_ID } from "@/lib/graph/sync";
 import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/realtime/rateLimit";
+import { apiError } from "@/lib/api/errors";
 import {
   publishBookingCreated,
   publishBookingUpdated,
@@ -46,7 +47,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     payload = (await req.json()) as GraphNotificationPayload;
   } catch {
-    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid request body");
   }
 
   // Acknowledge immediately — Graph requires a response within 10 seconds.

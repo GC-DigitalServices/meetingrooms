@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, AuthError } from "@/lib/auth";
 import { bookingDetailVisibility } from "@/lib/booking/visibility";
 import { db } from "@/lib/db/client";
+import { apiError } from "@/lib/api/errors";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function GET(
   try {
     session = await requireSession(req);
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
   }
 
@@ -31,10 +32,7 @@ export async function GET(
     to:   searchParams.get("to"),
   });
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "from and to are required ISO datetime strings" },
-      { status: 400 }
-    );
+    return apiError("VALIDATION_ERROR", "from and to are required ISO datetime strings");
   }
 
   const { from, to } = parsed.data;
@@ -51,7 +49,6 @@ export async function GET(
     },
   });
 
-  // Enrich with organiser isStaff from User table, apply visibility stripping
   const organiserUpns = [...new Set(bookings.map((b) => b.organiserUpn))];
   const users = await db.user.findMany({
     where: { upn: { in: organiserUpns } },

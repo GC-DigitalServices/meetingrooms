@@ -3,6 +3,7 @@ import { requireSession, AuthError } from "@/lib/auth";
 import { canSeeRoom } from "@/lib/booking/visibility";
 import { db } from "@/lib/db/client";
 import { checkRateLimit } from "@/lib/realtime/rateLimit";
+import { apiError } from "@/lib/api/errors";
 
 export const runtime = "nodejs";
 
@@ -23,29 +24,28 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     session = await requireSession(req);
   } catch (err) {
-    if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
+    if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
   }
 
   const rl = await checkRateLimit(`rl:read:user:${session.upn}`, 100, 60_000);
   if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please wait a moment." },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
-    );
+    return apiError("RATE_LIMITED", "Too many requests. Please wait a moment.", {
+      headers: { "Retry-After": String(rl.retryAfterSecs) },
+    });
   }
 
   const { searchParams } = req.nextUrl;
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
   if (!fromParam || !toParam) {
-    return NextResponse.json({ error: "from and to are required ISO strings" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "from and to are required ISO strings");
   }
 
   const fromDate = new Date(fromParam);
   const toDate = new Date(toParam);
   if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()) || fromDate >= toDate) {
-    return NextResponse.json({ error: "Invalid from/to" }, { status: 400 });
+    return apiError("VALIDATION_ERROR", "Invalid from/to — must be valid ISO datetimes with from < to");
   }
 
   const rooms = await db.room.findMany({});
@@ -54,14 +54,12 @@ export async function GET(req: NextRequest): Promise<Response> {
   );
   const roomIds = visible.map((r) => r.id);
 
-  // Which rooms have a booking that overlaps [from, to)?
   const conflicts = await db.booking.findMany({
     where: { roomId: { in: roomIds }, startUtc: { lt: toDate }, endUtc: { gt: fromDate } },
     select: { roomId: true },
   });
   const conflictSet = new Set(conflicts.map((c) => c.roomId));
 
-  // Next upcoming booking per room (starting at or after fromDate)
   const futureBookings = await db.booking.findMany({
     where: { roomId: { in: roomIds }, startUtc: { gte: fromDate } },
     orderBy: { startUtc: "asc" },

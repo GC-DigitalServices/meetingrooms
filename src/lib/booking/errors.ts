@@ -40,6 +40,13 @@ export class LockTimeoutError extends Error {
   }
 }
 
+export class GraphUnavailableError extends Error {
+  constructor(message = "Booking service temporarily unavailable — please try again shortly") {
+    super(message);
+    this.name = "GraphUnavailableError";
+  }
+}
+
 // HTTP status mappings
 export const ERROR_STATUS: Record<string, number> = {
   NotPermittedError: 403,
