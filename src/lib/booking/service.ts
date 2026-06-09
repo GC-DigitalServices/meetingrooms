@@ -3,7 +3,8 @@ import { canUserBookRoom, wouldPassWithoutAdmin } from "./permissions";
 import { findConflict } from "./conflicts";
 import { snapToSlot, validateDuration } from "./duration";
 import { resolveBookingMailboxes, bookingLockKey } from "./mailboxes";
-import { ConflictError, NotOrganiserError } from "./errors";
+import { ConflictError, NotOrganiserError, GraphUnavailableError } from "./errors";
+import { isGraphDegraded, markGraphDegraded, clearGraphDegraded } from "./graph-health";
 import { withLock } from "@/lib/realtime/lock";
 import { createGraphEvent, updateGraphEvent, deleteGraphEvent } from "@/lib/graph/events";
 import { writeAudit } from "@/lib/db/audit";
@@ -111,6 +112,9 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   const lockKey      = bookingLockKey(room.id, room.kind, room.parentRoomId);
   const roomIds      = await familyRoomIds(room);
 
+  // Fail fast before acquiring the lock if Graph is known degraded
+  if (await isGraphDegraded()) throw new GraphUnavailableError();
+
   const booking = await withLock(lockKey, async () => {
     // 3. Conflict check (authoritative inside the lock)
     const existing = await db.booking.findMany({
@@ -120,16 +124,23 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     if (conflict) throw new ConflictError(`Conflicts with: ${conflict.subject}`);
 
     // 4. Graph write
-    const graphEvent = await createGraphEvent(primaryMbox, {
-      organiserUpn:     input.organiserUpn,
-      organiserName:    input.organiserName,
-      subject:          input.subject,
-      startUtc:         start,
-      endUtc:           end,
-      resourceMailboxes: mailboxes,
-      source:           "PORTAL",
-      bookingId:        "pending", // patched asynchronously below
-    });
+    let graphEvent;
+    try {
+      graphEvent = await createGraphEvent(primaryMbox, {
+        organiserUpn:     input.organiserUpn,
+        organiserName:    input.organiserName,
+        subject:          input.subject,
+        startUtc:         start,
+        endUtc:           end,
+        resourceMailboxes: mailboxes,
+        source:           "PORTAL",
+        bookingId:        "pending", // patched asynchronously below
+      });
+      clearGraphDegraded();
+    } catch {
+      markGraphDegraded();
+      throw new GraphUnavailableError();
+    }
 
     // 5. Postgres mirror
     const premisesNotes = input.premisesNotes ?? null;
@@ -234,6 +245,9 @@ export async function updateBooking(
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
   const roomIds     = await familyRoomIds(room);
 
+  // Fail fast before acquiring the lock if Graph is known degraded
+  if (await isGraphDegraded()) throw new GraphUnavailableError();
+
   const updated = await withLock(lockKey, async () => {
     // Conflict check (exclude this booking)
     const others = await db.booking.findMany({
@@ -251,12 +265,18 @@ export async function updateBooking(
     const newPremisesNotes = input.premisesNotes !== undefined ? input.premisesNotes : existing.premisesNotes;
 
     // Graph update
-    await updateGraphEvent(primaryMbox, existing.graphEventId, {
-      organiserName: existing.organiserName,
-      subject:       newSubject,
-      startUtc:      newStart,
-      endUtc:        newEnd,
-    });
+    try {
+      await updateGraphEvent(primaryMbox, existing.graphEventId, {
+        organiserName: existing.organiserName,
+        subject:       newSubject,
+        startUtc:      newStart,
+        endUtc:        newEnd,
+      });
+      clearGraphDegraded();
+    } catch {
+      markGraphDegraded();
+      throw new GraphUnavailableError();
+    }
 
     // Idempotency: only update hash (and notify later) if notify-relevant fields changed
     const newHash = shouldNotifyPremises(room.kind, newPremisesNotes)
@@ -340,8 +360,17 @@ export async function cancelBooking(
   const lockKey    = bookingLockKey(room.id, room.kind, room.parentRoomId);
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
 
+  // Fail fast before acquiring the lock if Graph is known degraded
+  if (await isGraphDegraded()) throw new GraphUnavailableError();
+
   await withLock(lockKey, async () => {
-    await deleteGraphEvent(primaryMbox, existing.graphEventId);
+    try {
+      await deleteGraphEvent(primaryMbox, existing.graphEventId);
+      clearGraphDegraded();
+    } catch {
+      markGraphDegraded();
+      throw new GraphUnavailableError();
+    }
     await db.booking.delete({ where: { id: bookingId } });
 
     await writeAudit({
