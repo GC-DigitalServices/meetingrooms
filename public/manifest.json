@@ -1,0 +1,9 @@
+{
+  "name": "Room Display",
+  "short_name": "Display",
+  "start_url": "/display",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#00534C",
+  "theme_color": "#00534C"
+}
