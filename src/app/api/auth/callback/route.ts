@@ -105,8 +105,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const isStaff = groups.staff_groups.some((g) => groupIds.includes(g));
   const isAdmin = groupIds.includes(groups.admin_group);
 
-  // Upsert user record
-  await db.user.upsert({
+  // Upsert user record — read back to get termsAcceptedAt
+  const user = await db.user.upsert({
     where: { upn: me.userPrincipalName },
     create: {
       upn: me.userPrincipalName,
@@ -125,6 +125,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     groupIds,
     isStaff,
     isAdmin,
+    termsAccepted: !!user.termsAcceptedAt,
     signedInAt: Date.now(),
   });
 

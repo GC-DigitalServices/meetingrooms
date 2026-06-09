@@ -9,6 +9,7 @@ export interface Session {
   groupIds: string[];
   isStaff: boolean;
   isAdmin: boolean;
+  termsAccepted: boolean;
   signedInAt: number; // unix ms — used for 30-day absolute limit
   lastActiveAt: number;
 }
@@ -52,6 +53,18 @@ export async function loadSession(sessionId: string): Promise<Session | null> {
   );
 
   return session;
+}
+
+/** Patches specific fields on an existing session without touching the TTL logic. */
+export async function patchSession(
+  sessionId: string,
+  patch: Partial<Pick<Session, "termsAccepted">>
+): Promise<void> {
+  const raw = await getRedisClient().get(key(sessionId));
+  if (!raw) return;
+  const session = JSON.parse(raw) as Session;
+  Object.assign(session, patch);
+  await getRedisClient().set(key(sessionId), JSON.stringify(session), "KEEPTTL");
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

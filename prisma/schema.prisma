@@ -98,12 +98,13 @@ model Device {
 }
 
 model User {
-  upn         String    @id
-  displayName String
-  isStaff     Boolean
-  isAdmin     Boolean   @default(false)
-  groupIds    String[]
-  lastLoginAt DateTime?
+  upn                    String    @id
+  displayName            String
+  isStaff                Boolean
+  isAdmin                Boolean   @default(false)
+  groupIds               String[]
+  lastLoginAt            DateTime?
+  termsAcceptedAt        DateTime?
 }
 
 model GraphSubscription {

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 // API routes that use device-token auth handle auth in the route handler.
 const PUBLIC_PREFIXES = [
   "/sign-in",
+  "/terms",          // ToU page — auth checked inside the page, not via session cookie redirect
   "/api/auth/",
   "/api/health",
   "/api/qr",
