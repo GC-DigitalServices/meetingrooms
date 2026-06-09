@@ -3,12 +3,15 @@ import { getRedisClient } from "@/lib/realtime/redis";
 import { graphClient } from "@/lib/graph/client";
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
 import { ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function formatLondon(date: Date, opts: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", ...opts }).format(date);
+}
 
 async function withTimeout<T>(
   fn: () => Promise<T>,
@@ -115,7 +118,7 @@ export default async function StatusPage() {
           <h1 className="text-2xl font-semibold tracking-tight">System status</h1>
           <span className="text-sm text-muted-foreground">
             Checked at{" "}
-            {formatInTimeZone(now, "Europe/London", "HH:mm:ss zzz")}
+            {formatLondon(now, { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" })}
           </span>
         </div>
       </div>
@@ -154,11 +157,10 @@ export default async function StatusPage() {
                       expiringSoon.length > 0 ? "font-medium text-amber-700" : ""
                     }
                   >
-                    {formatInTimeZone(
-                      earliest.expiresAt,
-                      "Europe/London",
-                      "EEE d MMM yyyy 'at' HH:mm"
-                    )}
+                    {formatLondon(earliest.expiresAt, {
+                      weekday: "short", day: "numeric", month: "short",
+                      year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+                    })}
                   </span>
                 </p>
               )}
