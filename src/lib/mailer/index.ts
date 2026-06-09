@@ -68,6 +68,41 @@ export function shouldNotifyPremises(roomKind: string, premisesNotes: string | n
  * Failures are caught, logged, and written to the audit log — they NEVER
  * roll back the booking.
  */
+/**
+ * Sends a plain-text operational alert to the admin_alert_email configured in
+ * groups.yaml. Failures are logged but never thrown — alerts must not cascade.
+ */
+export async function sendAdminAlert(subject: string, body: string): Promise<void> {
+  const { MAIL_SENDER_UPN } = getConfig();
+  if (!MAIL_SENDER_UPN) {
+    logger.warn("mailer: MAIL_SENDER_UPN not configured, skipping admin alert");
+    return;
+  }
+
+  const groups = loadGroups();
+  if (!groups.admin_alert_email) {
+    logger.warn("mailer: admin_alert_email not set in groups.yaml, skipping alert");
+    return;
+  }
+
+  try {
+    await graphClient.post(
+      `/users/${encodeURIComponent(MAIL_SENDER_UPN)}/sendMail`,
+      {
+        message: {
+          subject: `[Room Booking Alert] ${subject}`,
+          body: { contentType: "Text", content: body },
+          toRecipients: [{ emailAddress: { address: groups.admin_alert_email } }],
+        },
+        saveToSentItems: false,
+      }
+    );
+    logger.info({ subject }, "mailer: admin_alert_sent");
+  } catch (err) {
+    logger.error({ subject, err }, "mailer: admin_alert_failed");
+  }
+}
+
 export async function sendPremisesNotification(params: PremisesNotifyParams): Promise<void> {
   const { MAIL_SENDER_UPN } = getConfig();
   if (!MAIL_SENDER_UPN) {

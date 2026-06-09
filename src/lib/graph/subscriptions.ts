@@ -44,13 +44,16 @@ export async function createSubscriptionForRoom(roomId: string): Promise<void> {
   logger.info({ roomId, subscriptionId: sub.id }, "graph: subscription created");
 }
 
-export async function renewExpiringSubscriptions(): Promise<void> {
+export async function renewExpiringSubscriptions(): Promise<{ renewed: number; failed: number }> {
   const threshold = new Date();
   threshold.setHours(threshold.getHours() + 24);
 
   const expiring = await db.graphSubscription.findMany({
     where: { expiresAt: { lte: threshold } },
   });
+
+  let renewed = 0;
+  let failed = 0;
 
   for (const sub of expiring) {
     try {
@@ -63,10 +66,14 @@ export async function renewExpiringSubscriptions(): Promise<void> {
         data: { expiresAt: new Date(newExpiry) },
       });
       logger.info({ subscriptionId: sub.id }, "graph: subscription renewed");
+      renewed++;
     } catch (err) {
       logger.error({ subscriptionId: sub.id, err }, "graph: failed to renew subscription");
+      failed++;
     }
   }
+
+  return { renewed, failed };
 }
 
 // Called on startup: creates subscriptions for any bookable mailbox room

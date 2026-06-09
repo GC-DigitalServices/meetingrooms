@@ -18,3 +18,8 @@ admin_group: "6f0bf91a-5b22-4a64-9874-6754d2f0e18e" # MRBS Admin
 # Email address that receives premises/transport notifications.
 # Also requires PREMISES_SENDER_UPN env var (the sending mailbox).
 premises_email: "premises@greenhead.ac.uk"
+
+# Email address (or DL) that receives system alert emails:
+# offline displays, subscription renewal failures, resync failures.
+# Requires MAIL_SENDER_UPN env var.
+admin_alert_email: "it@greenhead.ac.uk"

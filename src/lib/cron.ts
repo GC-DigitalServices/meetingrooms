@@ -2,6 +2,8 @@ import cron from "node-cron";
 import { renewExpiringSubscriptions, ensureSubscriptionsForAllRooms } from "@/lib/graph/subscriptions";
 import { fullResync } from "@/lib/graph/sync";
 import { db } from "@/lib/db/client";
+import { getRedisClient } from "@/lib/realtime/redis";
+import { sendAdminAlert } from "@/lib/mailer";
 import { logger } from "@/lib/logger";
 
 export function startCronJobs(): void {
@@ -9,7 +11,26 @@ export function startCronJobs(): void {
   cron.schedule("0 */6 * * *", async () => {
     logger.info("cron: subscription renewal starting");
     try {
-      await renewExpiringSubscriptions();
+      const result = await renewExpiringSubscriptions();
+      logger.info(result, "cron: subscription renewal complete");
+      if (result.failed === 0) {
+        getRedisClient().del("cron:sub_renew_fail_streak").catch(() => {});
+      } else {
+        try {
+          const redis = getRedisClient();
+          const streak = await redis.incr("cron:sub_renew_fail_streak");
+          await redis.expire("cron:sub_renew_fail_streak", 60 * 60 * 24);
+          if (streak >= 2) {
+            sendAdminAlert(
+              "Subscription renewal failures",
+              `${result.failed} subscription(s) failed to renew (${streak} consecutive failing runs).\n\n` +
+              `Bookings will stop syncing when subscriptions expire. Check Graph API connectivity and service account permissions.`
+            ).catch(() => {});
+          }
+        } catch {
+          // Redis unavailable — streak tracking skipped
+        }
+      }
     } catch (err) {
       logger.error({ err }, "cron: subscription renewal failed");
     }
@@ -22,6 +43,12 @@ export function startCronJobs(): void {
       await fullResync();
     } catch (err) {
       logger.error({ err }, "cron: full resync failed");
+      sendAdminAlert(
+        "Nightly resync failed",
+        `The nightly Graph→Postgres resync failed.\n\n` +
+        `Bookings may be out of sync with Exchange. Investigate immediately.\n\n` +
+        `Error: ${err instanceof Error ? err.message : String(err)}`
+      ).catch(() => {});
     }
   });
 
@@ -50,6 +77,23 @@ export function startCronJobs(): void {
 
         if (isCritical) {
           logger.error({ deviceId: device.id, label, lastSeen }, "cron: device_silent_critical (>6h)");
+          // Alert once per 8h per device to avoid repeated emails
+          try {
+            const redis = getRedisClient();
+            const alertKey = `cron:device_alerted:${device.id}`;
+            const alreadyAlerted = await redis.get(alertKey);
+            if (!alreadyAlerted) {
+              await redis.set(alertKey, "1", "EX", 60 * 60 * 8);
+              sendAdminAlert(
+                `Display offline: ${label}`,
+                `The display "${label}" has not sent a heartbeat since ${lastSeen}.\n\n` +
+                `Check the iPad is powered on and connected to the network.\n\n` +
+                `Device ID: ${device.id}`
+              ).catch(() => {});
+            }
+          } catch {
+            // Redis unavailable — skip alert
+          }
         } else {
           logger.warn({ deviceId: device.id, label, lastSeen }, "cron: device_silent_warning (>2h)");
         }
