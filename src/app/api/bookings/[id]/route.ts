@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, AuthError } from "@/lib/auth";
 import { updateBooking, cancelBooking } from "@/lib/booking/service";
 import { ERROR_STATUS } from "@/lib/booking/errors";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
+import { writeAudit } from "@/lib/db/audit";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -23,6 +25,19 @@ export async function PATCH(
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
+  }
+
+  const rl = await checkRateLimit(`rl:write:user:${session.upn}`, 5, 60_000);
+  if (!rl.allowed) {
+    writeAudit({
+      actor: session.upn,
+      action: "booking.write.rate_limited",
+      metadata: { method: "PATCH", endpoint: "/api/bookings/[id]" },
+    }).catch(() => {});
+    return NextResponse.json(
+      { error: "Too many booking requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
+    );
   }
 
   const { id } = await params;
@@ -67,6 +82,19 @@ export async function DELETE(
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
+  }
+
+  const rl = await checkRateLimit(`rl:write:user:${session.upn}`, 5, 60_000);
+  if (!rl.allowed) {
+    writeAudit({
+      actor: session.upn,
+      action: "booking.write.rate_limited",
+      metadata: { method: "DELETE", endpoint: "/api/bookings/[id]" },
+    }).catch(() => {});
+    return NextResponse.json(
+      { error: "Too many booking requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
+    );
   }
 
   const { id } = await params;

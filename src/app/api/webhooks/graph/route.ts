@@ -4,6 +4,7 @@ import { graphClient } from "@/lib/graph/client";
 import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
 import { ORGANISER_UPN_PROP_ID } from "@/lib/graph/sync";
 import { logger } from "@/lib/logger";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import {
   publishBookingCreated,
   publishBookingUpdated,
@@ -26,6 +27,18 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(validationToken, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  // Per-IP rate limit — protects against webhook URL abuse.
+  // Graph sends from Microsoft IP ranges; 500/min gives ample headroom.
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  const rl = await checkRateLimit(`rl:webhook:${ip}`, 500, 60_000);
+  if (!rl.allowed) {
+    return new Response(null, {
+      status: 429,
+      headers: { "Retry-After": String(rl.retryAfterSecs) },
     });
   }
 

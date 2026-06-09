@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth, DeviceAuthError, signQrToken } from "@/lib/auth/device";
-import { getRedisClient } from "@/lib/realtime/redis";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
-
-const RATE_LIMIT = 60; // mints per device per hour
 
 /**
  * GET /api/devices/qr-token — device-auth'd.
@@ -22,15 +20,11 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   // Sliding rate limit: 60 mints per device per hour
-  const redis = getRedisClient();
-  const key = `qr:rate:${device.id}`;
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, 3600);
-
-  if (count > RATE_LIMIT) {
+  const rl = await checkRateLimit(`rl:qr:${device.id}`, 60, 3_600_000);
+  if (!rl.allowed) {
     return NextResponse.json(
-      { error: "Rate limit exceeded" },
-      { status: 429, headers: { "Retry-After": "3600" } },
+      { error: "QR token rate limit exceeded. Try again later." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
     );
   }
 
@@ -39,7 +33,7 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Log token prefix only — never the full value
   logger.info(
-    { deviceId: device.id, tokenPrefix: token.slice(0, 8), count },
+    { deviceId: device.id, tokenPrefix: token.slice(0, 8), remaining: rl.remaining },
     "qr: token minted",
   );
 

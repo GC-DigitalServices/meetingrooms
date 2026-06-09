@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, AuthError } from "@/lib/auth";
 import { canSeeRoom } from "@/lib/booking/visibility";
 import { db } from "@/lib/db/client";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
+  }
+
+  const rl = await checkRateLimit(`rl:read:user:${session.upn}`, 100, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
+    );
   }
 
   const { searchParams } = req.nextUrl;

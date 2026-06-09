@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { createBooking } from "@/lib/booking/service";
 import { AuthError } from "@/lib/auth";
 import { ERROR_STATUS } from "@/lib/booking/errors";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
+import { writeAudit } from "@/lib/db/audit";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -22,6 +24,19 @@ export async function POST(req: NextRequest): Promise<Response> {
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: 401 });
     throw err;
+  }
+
+  const rl = await checkRateLimit(`rl:write:user:${session.upn}`, 5, 60_000);
+  if (!rl.allowed) {
+    writeAudit({
+      actor: session.upn,
+      action: "booking.write.rate_limited",
+      metadata: { method: "POST", endpoint: "/api/bookings" },
+    }).catch(() => {});
+    return NextResponse.json(
+      { error: "Too many booking requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSecs) } },
+    );
   }
 
   let body: unknown;
