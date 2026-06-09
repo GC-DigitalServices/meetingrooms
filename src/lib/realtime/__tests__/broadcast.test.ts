@@ -57,6 +57,7 @@ const TEST_SESSION = {
   isStaff: true,
   isAdmin: false,
   groupIds: [],
+  termsAccepted: true,
   signedInAt: Date.now(),
   lastActiveAt: Date.now(),
 };

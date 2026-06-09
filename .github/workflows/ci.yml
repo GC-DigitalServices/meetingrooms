@@ -77,3 +77,14 @@ jobs:
           SESSION_SECRET: ci-session-secret-placeholder-at-least-32
           QR_SIGNING_KEY: ci-qr-signing-key-placeholder-at-least-32
           PUBLIC_BASE_URL: http://localhost:3000
+
+      # Accessibility (axe-core) — only runs when a deployed preview URL is available.
+      # Set PLAYWRIGHT_BASE_URL as a GitHub Actions secret pointing at the Railway
+      # preview deployment to enable this step on PRs.
+      - name: Accessibility checks (axe-core / Playwright)
+        if: env.PLAYWRIGHT_BASE_URL != ''
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}

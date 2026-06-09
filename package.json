@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "prepare": "husky",
     "smoke": "tsx scripts/graph-smoke.ts",
     "rooms:import": "tsx scripts/rooms-import.ts",
@@ -46,7 +47,9 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/eslintrc": "^3.3.5",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19.0.0",

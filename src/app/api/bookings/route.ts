@@ -53,6 +53,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const { roomId, subject, start, end, premisesNotes } = parsed.data;
 
   try {
+    const t0 = performance.now();
     const booking = await createBooking({
       roomId,
       organiserUpn:  session.upn,
@@ -63,7 +64,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       premisesNotes,
       actor: session,
     });
-    return NextResponse.json(booking, { status: 201 });
+    const dur = Math.round(performance.now() - t0);
+    return NextResponse.json(booking, {
+      status: 201,
+      headers: { "Server-Timing": `booking;dur=${dur};desc="create"` },
+    });
   } catch (err) {
     return bookingServiceError(err);
   }
