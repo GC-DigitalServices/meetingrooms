@@ -75,6 +75,7 @@ async function main() {
         count++;
       }
     } else {
+      const kind = room.kind === "minibus" ? "MINIBUS" : "STANDARD";
       await db.room.upsert({
         where: { id: room.id },
         create: {
@@ -87,7 +88,7 @@ async function main() {
           equipment: room.equipment,
           bookable: room.bookable ?? true,
           allowedGroups: room.allowedGroups,
-          kind: "STANDARD",
+          kind,
         },
         update: {
           mailboxUpn: room.mailboxUpn,
