@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db/client";
 import { graphClient } from "@/lib/graph/client";
