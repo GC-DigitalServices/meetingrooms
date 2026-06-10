@@ -83,13 +83,15 @@ export default function Sidebar({ isAdmin, displayName }: Props) {
       {/* Bottom actions */}
       <div className="border-t border-outline-variant pt-md flex flex-col gap-1">
         <div className="px-3 py-2 text-xs text-on-surface-variant truncate">{displayName}</div>
-        <a
-          href="/api/auth/logout"
-          className="flex items-center gap-md p-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-all"
-        >
-          <span className="material-symbols-outlined">logout</span>
-          Sign out
-        </a>
+        <form action="/api/auth/logout" method="POST">
+          <button
+            type="submit"
+            className="flex items-center gap-md p-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-all w-full"
+          >
+            <span className="material-symbols-outlined">logout</span>
+            Sign out
+          </button>
+        </form>
       </div>
     </aside>
   );
