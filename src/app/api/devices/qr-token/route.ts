@@ -19,7 +19,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     throw err;
   }
 
-  const rl = await checkRateLimit(`rl:qr:${device.id}`, 60, 3_600_000);
+  const rl = await checkRateLimit(`rl:qr:${device.id}`, 60, 3_600_000, { failClosed: true });
   if (!rl.allowed) {
     return apiError("RATE_LIMITED", "QR token rate limit exceeded. Try again later.", {
       headers: { "Retry-After": String(rl.retryAfterSecs) },

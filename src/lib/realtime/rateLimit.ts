@@ -27,17 +27,31 @@ end
 return {0, 0}
 `;
 
+export interface RateLimitOptions {
+  /**
+   * Behaviour when Redis is unreachable.
+   *   false (default) — fail OPEN: allow the request. Use for UX read limits
+   *                     where blocking legitimate users is worse than the abuse.
+   *   true            — fail CLOSED: deny the request. Use for security-relevant
+   *                     limits (enrollment, token minting, auth) where an
+   *                     attacker could exploit a Redis outage to remove throttling.
+   */
+  failClosed?: boolean;
+}
+
 /**
  * Check and record one request against a sliding-window rate limit.
  *
  * @param key      Redis key, e.g. "rl:write:user:jsmith@college.ac.uk"
  * @param limit    Maximum requests allowed in the window
  * @param windowMs Window length in milliseconds
+ * @param opts     See {@link RateLimitOptions}. Defaults to fail-open.
  */
 export async function checkRateLimit(
   key: string,
   limit: number,
   windowMs: number,
+  opts: RateLimitOptions = {},
 ): Promise<RateLimitResult> {
   const redis = getRedisClient();
   const now = Date.now();
@@ -61,6 +75,12 @@ export async function checkRateLimit(
       retryAfterSecs: allowed ? 0 : Math.ceil(windowMs / 1000),
     };
   } catch (err) {
+    if (opts.failClosed) {
+      // Fail closed — a security-relevant limit must not be silently removed
+      // when Redis is down, or an attacker can exploit the outage.
+      logger.error({ err, key }, "rateLimit: Redis unavailable, failing closed");
+      return { allowed: false, remaining: 0, retryAfterSecs: Math.ceil(windowMs / 1000) };
+    }
     // Fail open — better to let a request through than to block legitimate
     // users because Redis is temporarily unreachable.
     logger.warn({ err, key }, "rateLimit: Redis unavailable, failing open");

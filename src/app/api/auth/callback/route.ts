@@ -80,7 +80,6 @@ export async function GET(req: NextRequest): Promise<Response> {
     accessToken = tokenResponse.accessToken;
   } catch (err) {
     logger.error({ err }, "auth: token exchange failed");
-    console.error("TOKEN EXCHANGE ERROR:", err instanceof Error ? err.message : String(err));
     return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=token_exchange`);
   }
 
