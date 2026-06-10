@@ -7,8 +7,6 @@ import Header from "@/components/portal/Header";
 import Sidebar from "@/components/portal/Sidebar";
 import BottomNav from "@/components/portal/BottomNav";
 import ConnectionBanner from "@/components/portal/ConnectionBanner";
-import CookieNotice from "@/components/portal/CookieNotice";
-
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession();
   if (!session) redirect("/sign-in");
@@ -51,18 +49,13 @@ export default async function PortalLayout({ children }: { children: React.React
         </main>
 
         {/* Footer */}
-        <footer className="lg:ml-64 border-t px-margin-mobile md:px-margin-desktop py-4 text-xs text-muted-foreground flex items-center gap-4">
-          <a href="/privacy" className="hover:underline">Privacy notice</a>
-          <span>·</span>
-          <span>Room Booking Platform · Greenhead College</span>
+        <footer className="lg:ml-64 border-t px-margin-mobile md:px-margin-desktop py-4 text-xs text-muted-foreground">
+          Room Booking Platform · Greenhead College
         </footer>
 
         {/* Mobile bottom navigation */}
         <BottomNav />
       </div>
-
-      {/* Cookie notice — dismissible, localStorage-persisted */}
-      <CookieNotice />
 
       <Toaster richColors position="top-right" />
     </SocketProvider>

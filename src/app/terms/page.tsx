@@ -54,13 +54,6 @@ export default async function TermsPage({
               may result in your access being suspended.
             </li>
           </ul>
-          <p>
-            For data handling details see the{" "}
-            <a href="/privacy" className="underline hover:text-foreground">
-              Privacy notice
-            </a>
-            .
-          </p>
         </div>
 
         <form action={actionUrl} method="POST">

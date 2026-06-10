@@ -103,7 +103,21 @@ export function startCronJobs(): void {
     }
   });
 
-  logger.info("cron: jobs scheduled (subscription renewal every 6h, full resync at 02:00, device check every 15m)");
+  // Audit log pruning — weekly on Sunday at 03:00.
+  // Deletes entries older than 2 years; the table is append-only and unbounded otherwise.
+  cron.schedule("0 3 * * 0", async () => {
+    logger.info("cron: audit prune starting");
+    try {
+      const cutoff = new Date();
+      cutoff.setFullYear(cutoff.getFullYear() - 2);
+      const { count } = await db.auditLog.deleteMany({ where: { at: { lt: cutoff } } });
+      logger.info({ count, cutoff }, "cron: audit prune complete");
+    } catch (err) {
+      logger.error({ err }, "cron: audit prune failed");
+    }
+  });
+
+  logger.info("cron: jobs scheduled (subscription renewal every 6h, full resync at 02:00, device check every 15m, audit prune weekly)");
 
   // Ensure subscriptions exist for all rooms on startup.
   (async () => {
