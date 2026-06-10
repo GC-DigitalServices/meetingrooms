@@ -7,6 +7,7 @@ import Header from "@/components/portal/Header";
 import Sidebar from "@/components/portal/Sidebar";
 import BottomNav from "@/components/portal/BottomNav";
 import ConnectionBanner from "@/components/portal/ConnectionBanner";
+
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession();
   if (!session) redirect("/sign-in");

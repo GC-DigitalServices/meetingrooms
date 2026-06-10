@@ -31,3 +31,6 @@ pino-*.ndjson
 
 # Vitest
 coverage/
+
+# TypeScript build info
+tsconfig.tsbuildinfo

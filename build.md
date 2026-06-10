@@ -572,7 +572,7 @@ Run in-process using `node-cron`. No separate worker service — for our scale, 
 | `subscription-renewer` | every 6h | Renews Graph subscriptions within 24h of expiry |
 | `full-resync` | nightly 02:00 | Reconciles DB against Graph for every room mailbox — repairs any missed notifications |
 | `device-heartbeat-check` | every 15m | Flags iPads silent >2h, notifies admins if >6h |
-| `audit-prune` | weekly | Archives audit logs per the retention policy (section 12) |
+| `audit-prune` | weekly (Sun 03:00) | Deletes `AuditLog` rows older than 2 years |
 
 ## 10. Deployment
 
@@ -628,19 +628,10 @@ Daily life: an admin glances at the dashboard tile in the portal admin section (
 - The Application Access Policy is the security boundary that limits our app's blast radius to room mailboxes.
 - The room mailbox lockdown (`AllBookInPolicy = $false`) is the boundary that enforces "portal is the only writer."
 
-### Privacy
-
-The system processes personal data about staff and students (UPN, display name, sign-in times, booking history). This is processed under the college's existing data-protection arrangements. Before launch we will:
-
-- Brief the college DPO on what data is held, where, and for how long. This conversation happens in phase 1, not later.
-- Publish a short privacy notice in the portal footer.
-- Document a Subject Access Request process: an admin can export a user's bookings and audit entries on request.
-- Document a GDPR deletion path: when a user is offboarded (no longer in Entra), the nightly job anonymises their audit entries (`upn` replaced with `removed-user-<hash>`) and deletes their User row. Bookings they organised remain on the room calendars; their name on those events is replaced.
-
 ### Retention
 
 - Bookings in our DB: as long as they exist in Exchange.
-- Audit logs: 2 years.
+- Audit logs: 2 years (pruned automatically by a weekly cron job).
 - Device tokens: until revoked.
 - Session records in Redis: 30 days max.
 
@@ -664,7 +655,7 @@ These remain undecided and should be resolved during the build:
 1. **Staff without smartphones.** The QR flow assumes a phone with a camera. The printed-fallback URL on each iPad mount addresses this, but we should validate the experience with staff who fall into this category during pilot.
 2. **Cellular/Wi-Fi reach.** Some rooms (basements, far corners) may have weak signal. The mount checklist requires verification at install; where it fails, additional APs are deployed before the iPad goes in.
 3. **Composite-room subject convention.** When the whole composite is booked, do we set the same subject on all section mailboxes, or annotate ("Subject — Hall-A of 3")? Default position: same subject on all; revisit if it causes confusion in Outlook calendars.
-4. **Student bookings of staff-organised meetings as attendees.** If a teacher books a study room and adds a student as an attendee, the student sees the booking. That's correct under the visibility rules (it's their own booking). Confirm with the DPO.
+4. **Student bookings of staff-organised meetings as attendees.** If a teacher books a study room and adds a student as an attendee, the student sees the booking. That's correct under the visibility rules (it's their own booking).
 5. **Admin override of permission check.** Admins can book any room. Should there be a "book on behalf of" feature for genuine cases? Not in MVP; revisit if asked for.
 
 ## 15. References

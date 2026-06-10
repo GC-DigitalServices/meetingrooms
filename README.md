@@ -155,7 +155,7 @@ must be in place. Follow [`docs/runbooks/room-mailbox-provisioning.md`](./docs/r
 
 ## Status
 
-Phase 1 (foundation) in progress. See [`build.md`](./build.md) for the full technical design, the `Phases/` directory for the phase-by-phase build plan, and [`claude.md`](./claude.md) for the working rules.
+Phases 1–7 complete. Phase 8 (full rollout) pending. See [`build.md`](./build.md) for the full technical design, the `Phases/` directory for the phase-by-phase build plan, and [`claude.md`](./claude.md) for the working rules.
 
 ## Documentation
 
