@@ -55,8 +55,7 @@ async function syncMailbox(
     `?startDateTime=${now.toISOString()}` +
     `&endDateTime=${windowEnd.toISOString()}` +
     `&$select=id,iCalUId,subject,start,end,isAllDay,organizer,attendees,singleValueExtendedProperties` +
-    `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')` +
-    `&$top=100`;
+    `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')`;
 
   while (url) {
     const page = await graphClient.getCalendar<GraphCalendarViewResponse>(url);
