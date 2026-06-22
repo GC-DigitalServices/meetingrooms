@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession, AuthError } from "@/lib/auth";
 import { bookingDetailVisibility } from "@/lib/booking/visibility";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import { db } from "@/lib/db/client";
 import { apiError } from "@/lib/api/errors";
 import { z } from "zod";
@@ -22,6 +23,13 @@ export async function GET(
   } catch (err) {
     if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
     throw err;
+  }
+
+  const rl = await checkRateLimit(`rl:read:user:${session.upn}`, 100, 60_000);
+  if (!rl.allowed) {
+    return apiError("RATE_LIMITED", "Too many requests. Please wait a moment.", {
+      headers: { "Retry-After": String(rl.retryAfterSecs) },
+    });
   }
 
   const { id: roomId } = await params;

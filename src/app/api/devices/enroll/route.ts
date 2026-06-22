@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRedisClient } from "@/lib/realtime/redis";
+import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import { db } from "@/lib/db/client";
 import { apiError } from "@/lib/api/errors";
+import { logger } from "@/lib/logger";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -14,8 +16,24 @@ const EnrollSchema = z.object({
 /**
  * POST /api/devices/enroll — no auth required.
  * iPad presents a 6-digit pairing code and receives a long-lived device token (once only).
+ *
+ * The code space is small (10^6) and a successful guess yields a long-lived
+ * device token, so this endpoint is brute-force throttled per-IP AND globally,
+ * and the limit fails CLOSED so a Redis outage can't remove the throttle.
  */
 export async function POST(req: NextRequest): Promise<Response> {
+  // Brute-force protection — fail closed.
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  const ipRl = await checkRateLimit(`rl:enroll:ip:${ip}`, 5, 60_000, { failClosed: true });
+  const globalRl = await checkRateLimit("rl:enroll:global", 60, 60_000, { failClosed: true });
+  if (!ipRl.allowed || !globalRl.allowed) {
+    logger.warn({ ip }, "enroll: rate limited");
+    return apiError("RATE_LIMITED", "Too many enrolment attempts. Please wait and try again.", {
+      headers: { "Retry-After": String(Math.max(ipRl.retryAfterSecs, globalRl.retryAfterSecs)) },
+    });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

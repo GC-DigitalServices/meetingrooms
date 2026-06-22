@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, AuthError } from "@/lib/auth";
+import { requireAdmin, AuthError, ForbiddenError } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { getRedisClient } from "@/lib/realtime/redis";
 import { getConfig } from "@/lib/config";
@@ -20,14 +20,13 @@ const PairSchema = z.object({
  * The code is stored in Redis with a 10-minute TTL and is single-use.
  */
 export async function POST(req: NextRequest): Promise<Response> {
-  let session;
   try {
-    session = await requireSession(req);
+    await requireAdmin(req);
   } catch (err) {
     if (err instanceof AuthError) return apiError("UNAUTHENTICATED", err.message);
+    if (err instanceof ForbiddenError) return apiError("FORBIDDEN", err.message);
     throw err;
   }
-  if (!session.isAdmin) return apiError("FORBIDDEN", "Admin required");
 
   let body: unknown;
   try {

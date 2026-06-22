@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db/client";
 import { graphClient } from "@/lib/graph/client";
 import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
@@ -31,15 +31,18 @@ export async function POST(req: Request): Promise<Response> {
     });
   }
 
-  // Per-IP rate limit — protects against webhook URL abuse.
-  // Graph sends from Microsoft IP ranges; 500/min gives ample headroom.
+  // Rate limit — protects against webhook URL abuse. The per-IP key uses the
+  // client-supplied X-Forwarded-For (spoofable), so a global backstop caps a
+  // spoofed-IP flood regardless. Graph sends from Microsoft IP ranges; these
+  // limits give ample headroom for legitimate notification volume.
   const ip =
     (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
-  const rl = await checkRateLimit(`rl:webhook:${ip}`, 500, 60_000);
-  if (!rl.allowed) {
+  const ipRl = await checkRateLimit(`rl:webhook:ip:${ip}`, 500, 60_000);
+  const globalRl = await checkRateLimit("rl:webhook:global", 5_000, 60_000);
+  if (!ipRl.allowed || !globalRl.allowed) {
     return new Response(null, {
       status: 429,
-      headers: { "Retry-After": String(rl.retryAfterSecs) },
+      headers: { "Retry-After": String(Math.max(ipRl.retryAfterSecs, globalRl.retryAfterSecs)) },
     });
   }
 
@@ -62,6 +65,15 @@ export async function POST(req: Request): Promise<Response> {
 // ---------------------------------------------------------------------------
 // Notification processing
 // ---------------------------------------------------------------------------
+
+/** Constant-time string comparison that tolerates unequal lengths and null/undefined. */
+function timingSafeStrEqual(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
 
 async function processNotifications(payload: GraphNotificationPayload): Promise<void> {
   // Pre-load room lookup maps once for all notifications in this batch.
@@ -89,7 +101,7 @@ async function processNotifications(payload: GraphNotificationPayload): Promise<
       logger.warn({ subscriptionId: n.subscriptionId }, "webhook: unknown subscription, ignoring");
       continue;
     }
-    if (sub.clientState !== n.clientState) {
+    if (!timingSafeStrEqual(sub.clientState, n.clientState)) {
       logger.warn({ subscriptionId: n.subscriptionId }, "webhook: clientState mismatch, ignoring");
       continue;
     }

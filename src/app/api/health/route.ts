@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { getRedisClient } from "@/lib/realtime/redis";
+import { logger } from "@/lib/logger";
 
 // Force Node.js runtime — required for Prisma and ioredis.
 export const runtime = "nodejs";
 
+// This endpoint is public (used by the platform healthcheck). It must not leak
+// infrastructure detail. Boolean component status is fine; raw connection-error
+// strings (hostnames, ports, driver versions) are logged server-side only.
+// Admins get detailed diagnostics via the authenticated /admin/status page.
 type HealthResult = {
   ok: boolean;
   checks: { postgres: boolean; redis: boolean };
-  errors: string[];
   at: string;
 };
 
@@ -19,7 +23,6 @@ function timeout<T>(ms: number, value: T): Promise<T> {
 
 export async function GET(): Promise<NextResponse<HealthResult>> {
   const checks = { postgres: false, redis: false };
-  const errors: string[] = [];
 
   // Postgres — 5 s hard timeout so a slow first connection doesn't stall the healthcheck.
   try {
@@ -30,10 +33,10 @@ export async function GET(): Promise<NextResponse<HealthResult>> {
     if (result) {
       checks.postgres = true;
     } else {
-      errors.push("postgres: timed out after 5 s");
+      logger.error("health: postgres timed out after 5 s");
     }
   } catch (err) {
-    errors.push(`postgres: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error({ err }, "health: postgres check failed");
   }
 
   // Redis — 5 s hard timeout.
@@ -45,15 +48,15 @@ export async function GET(): Promise<NextResponse<HealthResult>> {
     if (pong === "PONG") {
       checks.redis = true;
     } else {
-      errors.push(`redis: ${pong === "TIMEOUT" ? "timed out after 5 s" : `unexpected response: ${pong}`}`);
+      logger.error({ pong }, "health: redis check failed");
     }
   } catch (err) {
-    errors.push(`redis: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error({ err }, "health: redis check failed");
   }
 
   const ok = checks.postgres && checks.redis;
 
-  // Always 200 — Railway healthcheck passes as long as the app is running.
-  // DB/Redis failures surface in the body and in the admin status indicator.
-  return NextResponse.json({ ok, checks, errors, at: new Date().toISOString() }, { status: 200 });
+  // Always 200 — the platform healthcheck passes as long as the app is running.
+  // Detailed failure reasons are logged server-side and shown on /admin/status.
+  return NextResponse.json({ ok, checks, at: new Date().toISOString() }, { status: 200 });
 }

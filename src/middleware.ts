@@ -36,6 +36,7 @@ function buildCsp(nonce: string): string {
     "img-src 'self' data: https://www.greenhead.ac.uk",
     "connect-src 'self'",
     "worker-src 'self'",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -72,6 +73,14 @@ export function middleware(req: NextRequest): NextResponse {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()",
   );
+  // HSTS — only in production (TLS is terminated upstream by the platform).
+  // Avoid sending it over plain-HTTP local dev where it would pin localhost.
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains; preload",
+    );
+  }
 
   return response;
 }
