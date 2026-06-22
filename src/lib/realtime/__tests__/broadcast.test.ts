@@ -78,6 +78,7 @@ const TEST_BOOKING: Booking = {
   premisesNotes: null,
   premisesNotifyHash: null,
   primaryMailboxUpn: "room-a@school.ac.uk",
+  recurringGroupId: null,
 };
 
 // ---------------------------------------------------------------------------

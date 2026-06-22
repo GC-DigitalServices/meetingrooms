@@ -79,6 +79,8 @@ export default function BookingDialog({
   const [assistanceNotes, setAssistanceNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(4);
 
   const isMinibus = roomKind === "MINIBUS";
 
@@ -93,6 +95,8 @@ export default function BookingDialog({
       setNeedAssistance(false);
       setAssistanceNotes("");
       setError(null);
+      setRepeatWeekly(false);
+      setRepeatWeeks(4);
     }
   }, [open, date, initialStart, initialEnd]);
 
@@ -131,25 +135,66 @@ export default function BookingDialog({
       : null;
 
     try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId,
-          subject: subject.trim(),
-          start: toUTC(selectedDate, startTime),
-          end: toUTC(selectedDate, endTime),
-          premisesNotes: finalPremisesNotes,
-        }),
-      });
+      let ok = false;
+      let errorMsg: string | null = null;
 
-      if (res.ok) {
-        toast.success("Room booked successfully");
+      if (repeatWeekly) {
+        const res = await fetch("/api/bookings/recurring", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId,
+            subject: subject.trim(),
+            start: toUTC(selectedDate, startTime),
+            end:   toUTC(selectedDate, endTime),
+            repeatWeeks,
+            premisesNotes: finalPremisesNotes,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { created: unknown[]; skipped: unknown[]; aborted: boolean };
+          const createdCount = data.created.length;
+          const skippedCount = data.skipped.length;
+          if (createdCount === 0) {
+            errorMsg = "No bookings could be created — all weeks are already taken.";
+          } else {
+            ok = true;
+            const msg = skippedCount > 0
+              ? `${createdCount} of ${repeatWeeks} bookings created. ${skippedCount} week${skippedCount > 1 ? "s were" : " was"} already taken.`
+              : `${createdCount} weekly booking${createdCount > 1 ? "s" : ""} created.`;
+            toast.success(msg);
+            if (data.aborted) toast.warning("Some weeks could not be created — calendar system temporarily unavailable.");
+          }
+        } else {
+          const data = (await res.json()) as { error?: string };
+          errorMsg = data.error ?? "Booking failed. Please try again.";
+        }
+      } else {
+        const res = await fetch("/api/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId,
+            subject: subject.trim(),
+            start: toUTC(selectedDate, startTime),
+            end:   toUTC(selectedDate, endTime),
+            premisesNotes: finalPremisesNotes,
+          }),
+        });
+        if (res.ok) {
+          ok = true;
+          toast.success("Room booked successfully");
+        } else {
+          const data = (await res.json()) as { error?: string };
+          errorMsg = data.error ?? "Booking failed. Please try again.";
+        }
+      }
+
+      if (ok) {
         onSuccess?.();
         onClose();
-      } else {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Booking failed. Please try again.");
+      } else if (errorMsg) {
+        setError(errorMsg);
       }
     } catch {
       setError("Network error. Please try again.");
@@ -159,6 +204,14 @@ export default function BookingDialog({
   }
 
   const endOptions = TIME_OPTIONS.filter((t) => t.value > startTime);
+
+  const repeatDates = repeatWeekly
+    ? Array.from({ length: repeatWeeks }, (_, i) => {
+        const d = new Date(selectedDate + "T12:00:00");
+        d.setDate(d.getDate() + i * 7);
+        return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+      })
+    : [];
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -275,6 +328,49 @@ export default function BookingDialog({
                   />
                   <p className="text-label-sm font-label-sm text-on-surface-variant">
                     Premises staff will receive an email with these details, the room and time.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Repeat weekly — only for non-minibus rooms */}
+          {!isMinibus && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setRepeatWeekly((v) => !v)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
+                  repeatWeekly
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">event_repeat</span>
+                  Repeat weekly
+                </span>
+                <span className="material-symbols-outlined text-base">
+                  {repeatWeekly ? "expand_less" : "expand_more"}
+                </span>
+              </button>
+
+              {repeatWeekly && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-label-sm font-label-sm text-on-surface-variant whitespace-nowrap">Number of weeks</label>
+                    <select
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={repeatWeeks}
+                      onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+                    >
+                      {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <option key={n} value={n}>{n} weeks</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-label-sm font-label-sm text-on-surface-variant">
+                    {repeatDates.join(" · ")}
                   </p>
                 </div>
               )}

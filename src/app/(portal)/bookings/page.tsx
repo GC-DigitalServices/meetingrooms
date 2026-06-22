@@ -4,16 +4,28 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format, isAfter, isBefore } from "date-fns";
 import { MapPin, Clock } from "lucide-react";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import CancelDialog from "@/components/portal/CancelDialog";
 import { localTime } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface BookingRow {
   id: string;
   subject: string;
   startUtc: string;
   endUtc: string;
+  recurringGroupId: string | null;
   room: { id: string; displayName: string; building: string | null };
 }
 
@@ -29,10 +41,32 @@ function groupByDay(bookings: BookingRow[]): [string, BookingRow[]][] {
 export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string } | null>(null);
+  const [cancelRecurringTarget, setCancelRecurringTarget] = useState<{ groupId: string; roomName: string; count: number } | null>(null);
+  const [cancellingAll, setCancellingAll] = useState(false);
 
   async function load() {
     const res = await fetch("/api/bookings/mine");
     if (res.ok) setBookings((await res.json()) as BookingRow[]);
+  }
+
+  async function handleCancelRemaining(groupId: string) {
+    setCancellingAll(true);
+    try {
+      const res = await fetch(`/api/bookings/recurring/${groupId}`, { method: "DELETE" });
+      if (res.ok) {
+        const data = (await res.json()) as { cancelled: number };
+        toast.success(`${data.cancelled} booking${data.cancelled !== 1 ? "s" : ""} cancelled`);
+        setCancelRecurringTarget(null);
+        void load();
+      } else {
+        const data = (await res.json()) as { error?: string };
+        toast.error(data.error ?? "Could not cancel bookings");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setCancellingAll(false);
+    }
   }
 
   useEffect(() => { void load(); }, []);
@@ -79,6 +113,14 @@ export default function MyBookingsPage() {
                     key={b.id}
                     booking={b}
                     onCancel={() => setCancelTarget({ id: b.id, roomName: b.room.displayName })}
+                    onCancelRemaining={
+                      b.recurringGroupId
+                        ? () => {
+                            const count = upcoming.filter(u => u.recurringGroupId === b.recurringGroupId).length;
+                            setCancelRecurringTarget({ groupId: b.recurringGroupId!, roomName: b.room.displayName, count });
+                          }
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -121,6 +163,29 @@ export default function MyBookingsPage() {
           onSuccess={load}
         />
       )}
+
+      {cancelRecurringTarget && (
+        <AlertDialog open onOpenChange={(v) => !v && setCancelRecurringTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel all remaining bookings?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will cancel all {cancelRecurringTarget.count} remaining weekly booking{cancelRecurringTarget.count !== 1 ? "s" : ""} for <strong>{cancelRecurringTarget.roomName}</strong>. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={cancellingAll}>Keep bookings</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => handleCancelRemaining(cancelRecurringTarget.groupId)}
+                disabled={cancellingAll}
+              >
+                {cancellingAll ? "Cancelling…" : "Yes, cancel all"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
@@ -129,10 +194,12 @@ function BookingRow({
   booking,
   past,
   onCancel,
+  onCancelRemaining,
 }: {
   booking: BookingRow;
   past?: boolean;
   onCancel?: () => void;
+  onCancelRemaining?: () => void;
 }) {
   return (
     <div className={`rounded-md border px-4 py-3 ${past ? "opacity-60" : ""}`}>
@@ -152,13 +219,30 @@ function BookingRow({
             </span>
           </div>
         </div>
-        {!past && onCancel && (
-          <button
-            onClick={onCancel}
-            className="text-xs text-muted-foreground hover:text-destructive transition-colors shrink-0"
-          >
-            Cancel
-          </button>
+        {!past && (onCancel || onCancelRemaining) && (
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {booking.recurringGroupId && (
+              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">Recurring</span>
+            )}
+            <div className="flex gap-2">
+              {onCancelRemaining && (
+                <button
+                  onClick={onCancelRemaining}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Cancel remaining
+                </button>
+              )}
+              {onCancel && (
+                <button
+                  onClick={onCancel}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

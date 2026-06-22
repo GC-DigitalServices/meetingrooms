@@ -42,6 +42,7 @@ export interface CreateBookingInput {
   end: Date;
   premisesNotes?: string | null;
   actor: ActorUser;
+  recurringGroupId?: string;
 }
 
 export interface UpdateBookingInput {
@@ -164,6 +165,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         premisesNotifyHash,
         primaryMailboxUpn: primaryMbox,
         lastSyncedAt:      new Date(),
+        recurringGroupId:  input.recurringGroupId ?? null,
       },
     });
 
@@ -406,4 +408,69 @@ export async function cancelBooking(
   publishBookingDeleted(room.id, bookingId, room.parentRoomId).catch((err) =>
     logger.warn({ err, bookingId }, "ws: booking.deleted broadcast failed")
   );
+}
+
+// ---------------------------------------------------------------------------
+// Recurring
+// ---------------------------------------------------------------------------
+
+export interface CreateRecurringBookingInput extends CreateBookingInput {
+  repeatWeeks: number;
+}
+
+export interface RecurringBookingResult {
+  created: Booking[];
+  skipped: Date[];
+  aborted: boolean;
+}
+
+export async function createRecurringBookings(
+  input: CreateRecurringBookingInput
+): Promise<RecurringBookingResult> {
+  const groupId = crypto.randomUUID();
+  const created: Booking[] = [];
+  const skipped: Date[] = [];
+
+  for (let i = 0; i < input.repeatWeeks; i++) {
+    const offsetMs = i * 7 * 24 * 60 * 60 * 1000;
+    const start = new Date(input.start.getTime() + offsetMs);
+    const end   = new Date(input.end.getTime()   + offsetMs);
+
+    try {
+      const booking = await createBooking({ ...input, start, end, recurringGroupId: groupId });
+      created.push(booking);
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        skipped.push(start);
+      } else if (err instanceof GraphUnavailableError) {
+        return { created, skipped, aborted: true };
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  return { created, skipped, aborted: false };
+}
+
+export async function cancelRemainingRecurring(
+  groupId: string,
+  actor: ActorUser
+): Promise<number> {
+  const now = new Date();
+  const future = await db.booking.findMany({
+    where: {
+      recurringGroupId: groupId,
+      organiserUpn: actor.upn,
+      startUtc: { gt: now },
+    },
+    select: { id: true },
+  });
+
+  let count = 0;
+  for (const { id } of future) {
+    await cancelBooking(id, actor);
+    count++;
+  }
+  return count;
 }
