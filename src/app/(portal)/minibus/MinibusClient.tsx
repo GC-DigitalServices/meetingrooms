@@ -74,9 +74,6 @@ export default function MinibusClient({ minibuses, statusBookings, minibusIds }:
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="font-display font-extrabold text-headline-xl text-on-background">Minibus Booking</h1>
-        <p className="mt-2 text-body-md text-on-surface-variant">
-          Book a college minibus. You&apos;ll need to provide the destination, number of passengers, and driver name.
-        </p>
       </div>
 
       {/* Vehicle list */}

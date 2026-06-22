@@ -658,6 +658,83 @@ These remain undecided and should be resolved during the build:
 4. **Student bookings of staff-organised meetings as attendees.** If a teacher books a study room and adds a student as an attendee, the student sees the booking. That's correct under the visibility rules (it's their own booking).
 5. **Admin override of permission check.** Admins can book any room. Should there be a "book on behalf of" feature for genuine cases? Not in MVP; revisit if asked for.
 
+## 16. Phase 9 — Visitor Car Park
+
+### Overview
+
+The visitor car park has 9 bays, each backed by its own Exchange resource mailbox. The system presents them as a single bookable resource called "Visitor Car Park." Staff book a slot in 30-minute increments; the system silently assigns a free bay. No bay number is ever shown to any user.
+
+This is entirely an Option A implementation: no new architectural concepts, no Postgres-only paths. The car park reuses the existing parent/child room relationship (same as COMPOSITE/SECTION), the same booking write path, and the same conflict check. The only new concept is the `PARKING` / `PARKING_BAY` room kind pair.
+
+### Data model changes
+
+Two new `RoomKind` values:
+
+| Kind | mailboxUpn | What it is |
+|------|-----------|------------|
+| `PARKING` | null | The pool — what users see and book. Has `sections` → the 9 bays. |
+| `PARKING_BAY` | e.g. `carpark-bay-01@greenhead.ac.uk` | Individual bay — hidden from all UI. `parentRoomId` → pool. |
+
+No new columns are required. The existing `parentRoomId` / `sections` relation covers the bay→pool link, identical to how SECTION→COMPOSITE works.
+
+### Exchange setup (prerequisite — done by IT, not the app)
+
+Before the feature can be activated, IT must:
+
+1. Create 9 Exchange resource mailboxes, e.g. `carpark-bay-01@greenhead.ac.uk` through `carpark-bay-09@greenhead.ac.uk`.
+2. Apply the standard room lockdown to each (`AllBookInPolicy = $false`, `BookInPolicy = @()`, `AutomateProcessing AutoAccept`) — same PowerShell block as all other room mailboxes.
+3. Add all 9 to the Application Access Policy security group so the app can write to them.
+4. Supply the 9 UPNs so they can be entered in `config/rooms.yaml`.
+
+### Booking write path
+
+The PARKING pool goes through the same lock → conflict check → Graph write → DB write → broadcast path as every other room, with one difference inside the lock:
+
+1. Lock on the **pool** ID (same pattern as COMPOSITE locks on the parent).
+2. Inside the lock: query all 9 bay IDs for conflicts in the requested window. Find the first free bay.
+3. If no free bay → `ConflictError("No car park bays available at this time")`.
+4. Graph write to the **free bay's mailbox** (not the pool — the pool has no mailbox).
+5. DB booking stored with `roomId = bay.id`.
+6. Display name resolved at read time: `booking.room.kind === 'PARKING_BAY'` → show `booking.room.parent.displayName` ("Visitor Car Park").
+
+### UI
+
+| Surface | Behaviour |
+|---------|-----------|
+| Room list | `PARKING_BAY` rooms hidden. `PARKING` card shows "9 bays" and a live "X available now" count. |
+| Room detail / timeline | Capacity-based view: each 30-min slot shows how many bays are free (e.g. "6 / 9"). |
+| Booking form | Unchanged — user picks start/end, clicks Book. No bay selection. |
+| Confirmation / My Bookings | Shows "Visitor Car Park" — no bay number. |
+| Admin view | Same as regular users — bay number hidden everywhere. |
+| iPad display | Not applicable. `PARKING` rooms are excluded from device pairing. |
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `prisma/schema.prisma` | Add `PARKING`, `PARKING_BAY` to `RoomKind` enum |
+| `prisma/migrations/` | New migration for the enum values |
+| `config/rooms.yaml` | New parking block — pool + 9 bays with real UPNs |
+| `src/lib/config/rooms.ts` | Parse parking pool + bays in YAML loader |
+| `scripts/rooms-import.ts` | Handle `PARKING` and `PARKING_BAY` kinds |
+| `src/lib/booking/mailboxes.ts` | Lock key for `PARKING` (lock on pool ID) |
+| `src/lib/booking/service.ts` | Parking branch in `createBooking`: find free bay inside lock, book bay mailbox, store `roomId = bay.id` |
+| `src/app/api/rooms/route.ts` | Filter `PARKING_BAY` from room list |
+| `src/app/api/rooms/[id]/bookings/route.ts` | For `PARKING` rooms, return per-slot available count |
+| Booking display components | Resolve `PARKING_BAY` bookings to pool display name |
+| Room list card | `PARKING` variant with capacity indicator |
+| Room detail page | Capacity-based timeline (count per slot, not binary free/busy) |
+
+### What does not change
+
+- `conflicts.ts` — untouched; conflict checks run against individual bay IDs as normal.
+- `resolveBookingMailboxes` — untouched; called with the specific bay.
+- `canUserBookRoom` — `allowedGroups` on the PARKING pool controls access, same as any other room.
+- Graph subscriptions — one per bay mailbox, same as any other mailbox; webhook dedup by `iCalUId` handles the rest.
+- Cancellation and edit paths — the stored `roomId` is the bay; the existing lock-and-write logic works unchanged.
+
+---
+
 ## 15. References
 
 - Microsoft Graph — Calendar API: https://learn.microsoft.com/graph/api/resources/event

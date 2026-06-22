@@ -183,11 +183,6 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
       <div className="flex flex-col md:flex-row justify-between items-end gap-md mb-lg">
         <div>
           <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Meeting Room Finder</h1>
-          <p className="text-body-md text-on-surface-variant max-w-lg">
-            {isStaff || isAdmin
-              ? "Find and reserve a meeting room for teaching, meetings or study."
-              : "Find and book a meeting room you're permitted to use."}
-          </p>
         </div>
         <div className="w-full md:w-96 relative">
           <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">search</span>
