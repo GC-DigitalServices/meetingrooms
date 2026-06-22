@@ -56,7 +56,7 @@ export default async function StatusPage() {
       withTimeout(() => db.$queryRaw`SELECT 1 as one`, 5000),
       withTimeout(() => getRedisClient().ping(), 5000),
       withTimeout(
-        () => graphClient.get<{ value: unknown[] }>("/subscriptions?$top=1"),
+        () => graphClient.get<{ value: unknown[] }>("/subscriptions"),
         10000
       ),
       db.graphSubscription.findMany({ orderBy: { expiresAt: "asc" } }),

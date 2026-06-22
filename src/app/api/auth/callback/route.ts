@@ -23,7 +23,7 @@ interface MembershipPage {
 
 async function fetchAllGroupIds(accessToken: string): Promise<string[]> {
   const ids: string[] = [];
-  let url = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf?$select=id&$top=100";
+  let url = "https://graph.microsoft.com/v1.0/me/transitiveMemberOf?$select=id";
 
   while (url) {
     const res = await fetch(url, {
