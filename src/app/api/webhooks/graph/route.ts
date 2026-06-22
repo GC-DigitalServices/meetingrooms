@@ -179,12 +179,19 @@ async function handleCreatedOrUpdated(
   );
   const organiserUpn = organiserProp?.value ?? event.organizer.emailAddress.address;
 
+  // The Graph event's organizer field is the room mailbox (we write under app credentials),
+  // not the real person. Resolve the real organiser name from the attendees list instead.
+  const organiserAttendee = event.attendees.find(
+    (a) => a.emailAddress.address.toLowerCase() === organiserUpn.toLowerCase()
+  );
+  const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
+
   const data = {
     graphEventId: event.id,
     graphICalUid: event.iCalUId,
     roomId: logicalRoomId,
     organiserUpn,
-    organiserName: event.organizer.emailAddress.name,
+    organiserName,
     subject: event.subject,
     startUtc: new Date(event.start.dateTime + "Z"),
     endUtc: new Date(event.end.dateTime + "Z"),
