@@ -25,7 +25,6 @@ interface Room {
   building: string | null;
   floor: string | null;
   capacity: number;
-  equipment: string[];
   kind: string;
   bookable: boolean;
   mailboxUpn: string | null;
@@ -45,7 +44,6 @@ interface FormState {
   kind: "STANDARD" | "MINIBUS";
   mailboxUpn: string;
   bookable: boolean;
-  equipment: string[];
   checkedGroupIds: string[];
   extraGroupIds: string;
 }
@@ -61,14 +59,6 @@ const KIND_LABEL: Record<string, string> = {
   MINIBUS: "Minibus",
 };
 
-const EQUIPMENT_OPTIONS = [
-  { value: "projector",          label: "Projector" },
-  { value: "whiteboard",         label: "Whiteboard" },
-  { value: "screen",             label: "Screen" },
-  { value: "video_conferencing", label: "Video conferencing" },
-  { value: "hearing_loop",       label: "Hearing loop" },
-];
-
 const EDITABLE_KINDS = new Set(["STANDARD", "MINIBUS"]);
 
 function blankForm(): FormState {
@@ -80,7 +70,6 @@ function blankForm(): FormState {
     kind:           "STANDARD",
     mailboxUpn:     "",
     bookable:       true,
-    equipment:      [],
     checkedGroupIds: [],
     extraGroupIds:  "",
   };
@@ -98,7 +87,6 @@ function roomToForm(room: Room, knownGroups: KnownGroup[]): FormState {
     kind:           room.kind as "STANDARD" | "MINIBUS",
     mailboxUpn:     room.mailboxUpn ?? "",
     bookable:       room.bookable,
-    equipment:      room.equipment,
     checkedGroupIds,
     extraGroupIds,
   };
@@ -146,15 +134,6 @@ function RoomFormDialog({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function toggleEquipment(value: string) {
-    setForm((f) => ({
-      ...f,
-      equipment: f.equipment.includes(value)
-        ? f.equipment.filter((e) => e !== value)
-        : [...f.equipment, value],
-    }));
-  }
-
   function toggleGroup(id: string) {
     setForm((f) => ({
       ...f,
@@ -179,7 +158,6 @@ function RoomFormDialog({
       capacity:      cap,
       mailboxUpn:    form.mailboxUpn.trim() || null,
       bookable:      form.bookable,
-      equipment:     form.equipment,
       allowedGroups: buildAllowedGroups(form),
       ...(!isEdit && { kind: form.kind }),
     };
@@ -307,24 +285,6 @@ function RoomFormDialog({
               className="h-4 w-4 rounded border-input"
             />
             <Label htmlFor="rf-bookable" className="cursor-pointer">Bookable</Label>
-          </div>
-
-          {/* Equipment */}
-          <div className="space-y-2">
-            <Label>Equipment</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {EQUIPMENT_OPTIONS.map(({ value, label }) => (
-                <label key={value} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.equipment.includes(value)}
-                    onChange={() => toggleEquipment(value)}
-                    className="h-4 w-4 rounded border-input"
-                  />
-                  <span className="text-sm">{label}</span>
-                </label>
-              ))}
-            </div>
           </div>
 
           {/* Allowed groups */}
