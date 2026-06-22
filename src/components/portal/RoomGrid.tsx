@@ -101,7 +101,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const [filterDate, setFilterDate] = useState(todayStr);
   const [filterFrom, setFilterFrom] = useState(nextQuarterHour);
   const [filterTo, setFilterTo] = useState(() => addHours(nextQuarterHour(), 1));
-  const [onlyFree, setOnlyFree] = useState(false);
+  const [onlyFree, setOnlyFree] = useState(isStaff || isAdmin);
   const [minCapacity, setMinCapacity] = useState(0);
   const [showAll, setShowAll] = useState(false);
 
@@ -151,7 +151,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   // ─── Filter & sort ───────────────────────────────────────────────────────
   const filtered = rooms
     .filter(r => {
-      if (!isStaff && !isAdmin && !showAll && !permitted.has(r.id)) return false;
+      if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
       if (search && !r.displayName.toLowerCase().includes(search.toLowerCase()) && !r.building?.toLowerCase().includes(search.toLowerCase())) return false;
       if (r.capacity < minCapacity) return false;
       if (onlyFree && avail[r.id] && !avail[r.id].free) return false;

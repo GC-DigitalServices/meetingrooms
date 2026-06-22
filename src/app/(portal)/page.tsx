@@ -19,6 +19,7 @@ export default async function PortalPage() {
 
   // What the user can see (showAll=true so non-staff still get all rooms when they toggle)
   const visibleRooms = allRooms.filter((r) =>
+    r.kind !== "MINIBUS" &&
     canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, true)
   );
 
