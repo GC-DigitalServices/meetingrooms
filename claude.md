@@ -136,7 +136,7 @@ lib/db/              Prisma
 
 lib/config/          zod env + YAML loaders
 
-config/rooms.yaml    room metadata, allowedGroups, composite hierarchy
+config/rooms.yaml    seed/reference only — rooms now managed via Admin UI → Postgres
 
 config/groups.yaml   staff\_groups, admin\_group
 
