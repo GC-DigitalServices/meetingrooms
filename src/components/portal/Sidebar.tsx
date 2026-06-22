@@ -15,7 +15,6 @@ const NAV: NavItem[] = [
   { href: "/", icon: "search", label: "Meeting Rooms" },
   { href: "/bookings", icon: "event_note", label: "My Bookings" },
   { href: "/minibus", icon: "directions_bus", label: "Minibus" },
-  { href: "/profile", icon: "person", label: "Profile" },
 ];
 
 const ADMIN_NAV: NavItem[] = [

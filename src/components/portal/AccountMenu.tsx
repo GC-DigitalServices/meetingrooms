@@ -34,9 +34,6 @@ export default function AccountMenu({ session }: Props) {
         <DropdownMenuItem asChild>
           <Link href="/bookings">My bookings</Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/profile">Profile</Link>
-        </DropdownMenuItem>
         {session.isAdmin && (
           <>
             <DropdownMenuSeparator />
