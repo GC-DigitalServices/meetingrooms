@@ -89,4 +89,12 @@ export const graphClient = {
 
   delete: (path: string): Promise<void> =>
     graphFetch("DELETE", path) as Promise<void>,
+
+  /** Returns the raw fetch Response (no JSON parsing, no retry). Use for binary resources like photos. */
+  getRawResponse: async (path: string): Promise<Response> => {
+    const token = await acquireToken();
+    return fetch(`${GRAPH_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
 };

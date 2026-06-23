@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Session } from "@/lib/auth/session";
+import { UserAvatar } from "@/components/portal/UserAvatar";
 
 interface Props {
   session: Session;
@@ -37,12 +38,9 @@ export default function Header({ session }: Props) {
           )}
         </nav>
 
-        {/* Right: user chip */}
-        <div className="flex items-center gap-md">
-          <div className="flex items-center gap-2 bg-primary-container px-3 py-1.5 rounded-full text-on-primary text-label-sm">
-            <span className="material-symbols-outlined text-sm">person</span>
-            <span className="hidden sm:inline max-w-[120px] truncate">{session.displayName}</span>
-          </div>
+        {/* Right: user avatar */}
+        <div className="flex items-center">
+          <UserAvatar displayName={session.displayName} />
         </div>
       </div>
     </header>
