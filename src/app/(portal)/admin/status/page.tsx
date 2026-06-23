@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { RenewButton } from "./RenewButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,7 +139,10 @@ export default async function StatusPage() {
       {/* Subscriptions */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Graph Subscriptions</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Graph Subscriptions</CardTitle>
+            <RenewButton />
+          </div>
         </CardHeader>
         <CardContent>
           {subError ? (
