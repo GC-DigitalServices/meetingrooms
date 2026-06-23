@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Session } from "@/lib/auth/session";
-import { UserAvatar } from "@/components/portal/UserAvatar";
+import { UserMenu } from "@/components/portal/UserMenu";
 
 interface Props {
   session: Session;
@@ -38,9 +38,9 @@ export default function Header({ session }: Props) {
           )}
         </nav>
 
-        {/* Right: user avatar */}
+        {/* Right: user menu */}
         <div className="flex items-center">
-          <UserAvatar displayName={session.displayName} />
+          <UserMenu displayName={session.displayName} />
         </div>
       </div>
     </header>

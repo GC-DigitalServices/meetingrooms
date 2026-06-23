@@ -104,7 +104,6 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const [bookingsMap, dispatch] = useReducer(reducer, initialBookings, buildInitialMap);
 
   // Search / filter state
-  const [search, setSearch] = useState("");
   const [filterDate, setFilterDate] = useState(todayStr);
   const [filterFrom, setFilterFrom] = useState(nextQuarterHour);
   const [filterTo, setFilterTo] = useState(() => addHours(nextQuarterHour(), 1));
@@ -179,8 +178,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const filtered = rooms
     .filter(r => {
       if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
-      if (search && !r.displayName.toLowerCase().includes(search.toLowerCase()) && !r.building?.toLowerCase().includes(search.toLowerCase())) return false;
-      if (r.capacity < minCapacity) return false;
+if (r.capacity < minCapacity) return false;
       if (onlyFree && avail[r.id] && !avail[r.id].free) return false;
       return true;
     })
@@ -211,19 +209,8 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   return (
     <div>
       {/* Page heading */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-md mb-lg">
-        <div>
-          <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Meeting Room Finder</h1>
-        </div>
-        <div className="w-full md:w-96 relative">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">search</span>
-          <input
-            className="w-full pl-12 pr-4 py-3 bg-white border border-outline-variant rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-body-md"
-            placeholder="Search by room name or building…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
+      <div className="mb-lg">
+        <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Meeting Room Finder</h1>
       </div>
 
       {/* Two-column layout */}

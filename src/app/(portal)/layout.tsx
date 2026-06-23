@@ -4,7 +4,6 @@ import { getServerSession } from "@/lib/auth/server";
 import { getRedisClient } from "@/lib/realtime/redis";
 import { SocketProvider } from "@/lib/socket-context";
 import Header from "@/components/portal/Header";
-import Sidebar from "@/components/portal/Sidebar";
 import BottomNav from "@/components/portal/BottomNav";
 import ConnectionBanner from "@/components/portal/ConnectionBanner";
 
@@ -29,12 +28,9 @@ export default async function PortalLayout({ children }: { children: React.React
         {/* Sticky top header */}
         <Header session={session} />
 
-        {/* Fixed left sidebar (desktop) */}
-        <Sidebar isAdmin={session.isAdmin} displayName={session.displayName} />
-
         {/* Graph API degraded — booking writes are failing */}
         {graphDegraded && (
-          <div className="bg-[#fff8e1] border-b border-[#ffe082] px-margin-mobile md:px-margin-desktop py-2 lg:ml-64">
+          <div className="bg-[#fff8e1] border-b border-[#ffe082] px-margin-mobile md:px-margin-desktop py-2">
             <p className="text-sm font-medium text-[#e65100]">
               ⚠ Booking service temporarily unavailable — new bookings may fail. Please try again shortly or contact IT.
             </p>
@@ -44,13 +40,13 @@ export default async function PortalLayout({ children }: { children: React.React
         {/* WebSocket connection degraded banner */}
         <ConnectionBanner />
 
-        {/* Main content — offset by sidebar width on lg */}
-        <main className="lg:ml-64 p-margin-mobile md:p-md lg:p-lg pb-24 lg:pb-lg min-h-[calc(100vh-72px)]">
+        {/* Main content */}
+        <main className="p-margin-mobile md:p-lg pb-24 min-h-[calc(100vh-72px)]">
           {children}
         </main>
 
         {/* Footer */}
-        <footer className="lg:ml-64 border-t px-margin-mobile md:px-margin-desktop py-4 text-xs text-muted-foreground">
+        <footer className="border-t px-margin-mobile md:px-margin-desktop py-4 text-xs text-muted-foreground">
           Room Booking Platform · Greenhead College
         </footer>
 
