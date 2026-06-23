@@ -55,12 +55,13 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Round up to the next 15-minute slot. */
+/** Round up to the next 15-minute slot, clamped to 07:00–20:00. */
 function nextQuarterHour() {
   const d = new Date();
   const m = Math.ceil(d.getMinutes() / 15) * 15;
-  const h = d.getHours() + Math.floor(m / 60);
-  return `${String(h % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const totalMin = (d.getHours() + Math.floor(m / 60)) * 60 + (m % 60);
+  const clamped = Math.max(7 * 60, Math.min(20 * 60, totalMin));
+  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
 }
 
 function addHours(time: string, h: number) {
@@ -198,7 +199,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const freeCount = filtered.filter(r => avail[r.id]?.free !== false).length;
 
   // ─── Time select options ─────────────────────────────────────────────────
-  const TIME_OPTIONS = Array.from({ length: 53 }, (_, i) => {
+  const TIME_OPTIONS = Array.from({ length: 57 }, (_, i) => {
     const m = 7 * 60 + i * 15;
     if (m > 21 * 60) return null;
     const h = String(Math.floor(m / 60)).padStart(2, "0");
