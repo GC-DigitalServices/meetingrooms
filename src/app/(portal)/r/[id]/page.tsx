@@ -87,7 +87,8 @@ export default async function QrLandingPage({
   const wholeRoomBusy = sectionIds.some((id) => busyNow.has(id)) || busyNow.has(room.id);
 
   return (
-    <main className="max-w-lg mx-auto px-4 py-10">
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
+    <div className="max-w-lg mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">{room.displayName}</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -193,6 +194,7 @@ export default async function QrLandingPage({
           ← Find another room
         </Link>
       </div>
-    </main>
+    </div>
+    </div>
   );
 }

@@ -55,23 +55,21 @@ export default async function PortalPage() {
   }));
 
   return (
-    <div>
-      <RoomGrid
-        rooms={visibleRooms.map((r) => ({
-          id: r.id,
-          displayName: r.displayName,
-          building: r.building,
-          floor: r.floor,
-          capacity: r.capacity,
-          equipment: r.equipment,
-          kind: r.kind,
-          bookable: r.bookable,
-        }))}
-        initialBookings={initialBookings}
-        isStaff={session.isStaff}
-        isAdmin={session.isAdmin}
-        permittedRoomIds={permittedRoomIds}
-      />
-    </div>
+    <RoomGrid
+      rooms={visibleRooms.map((r) => ({
+        id: r.id,
+        displayName: r.displayName,
+        building: r.building,
+        floor: r.floor,
+        capacity: r.capacity,
+        equipment: r.equipment,
+        kind: r.kind,
+        bookable: r.bookable,
+      }))}
+      initialBookings={initialBookings}
+      isStaff={session.isStaff}
+      isAdmin={session.isAdmin}
+      permittedRoomIds={permittedRoomIds}
+    />
   );
 }

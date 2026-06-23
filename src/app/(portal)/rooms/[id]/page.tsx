@@ -67,6 +67,7 @@ export default async function RoomDetailPage({
   });
 
   return (
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
     <div className="max-w-2xl">
       {/* Room header */}
       <div className="mb-6">
@@ -102,6 +103,7 @@ export default async function RoomDetailPage({
         viewerUpn={session.upn}
         isAdmin={session.isAdmin}
       />
+    </div>
     </div>
   );
 }

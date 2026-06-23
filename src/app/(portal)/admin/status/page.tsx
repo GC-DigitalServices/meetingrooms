@@ -105,6 +105,7 @@ export default async function StatusPage() {
   } as const;
 
   return (
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
     <div className="max-w-3xl space-y-6">
       {/* Header */}
       <div>
@@ -254,6 +255,7 @@ export default async function StatusPage() {
           )}
         </CardContent>
       </Card>
+    </div>
     </div>
   );
 }

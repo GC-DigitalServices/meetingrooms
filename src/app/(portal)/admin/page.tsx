@@ -20,6 +20,7 @@ export default async function AdminPage() {
   });
 
   return (
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
     <div className="max-w-2xl">
       <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">Admin</h1>
 
@@ -49,6 +50,7 @@ export default async function AdminPage() {
           </Link>
         ))}
       </div>
+    </div>
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function UserMenu({ displayName }: Props) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+        className="rounded-full ring-2 ring-secondary-fixed focus:outline-none focus-visible:ring-offset-1"
         aria-label="Account menu"
         aria-expanded={open}
       >

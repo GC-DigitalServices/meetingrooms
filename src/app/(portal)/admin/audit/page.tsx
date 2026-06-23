@@ -64,7 +64,7 @@ export default async function AdminAuditPage({
   const hasFilters = !!(action || date);
 
   return (
-    <div>
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>

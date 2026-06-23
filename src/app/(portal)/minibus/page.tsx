@@ -36,14 +36,16 @@ export default async function MinibusPage() {
   }));
 
   return (
-    <MinibusClient
-      minibuses={minibuses.map((m: { id: string; displayName: string; capacity: number }) => ({
-        id: m.id,
-        displayName: m.displayName,
-        capacity: m.capacity,
-      }))}
-      statusBookings={statusBookings}
-      minibusIds={minibuses.map((m: { id: string }) => m.id)}
-    />
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
+      <MinibusClient
+        minibuses={minibuses.map((m: { id: string; displayName: string; capacity: number }) => ({
+          id: m.id,
+          displayName: m.displayName,
+          capacity: m.capacity,
+        }))}
+        statusBookings={statusBookings}
+        minibusIds={minibuses.map((m: { id: string }) => m.id)}
+      />
+    </div>
   );
 }

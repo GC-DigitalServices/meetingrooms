@@ -25,12 +25,12 @@ const config: Config = {
         "surface-tint": "#246961",
 
         // Secondary (amber / CTA)
-        secondary: { DEFAULT: "#855300", foreground: "#ffffff" },
+        secondary: { DEFAULT: "#735c00", foreground: "#ffffff" },
         "on-secondary": "#ffffff",
-        "secondary-container": "#f9a000",
-        "on-secondary-container": "#633d00",
-        "secondary-fixed": "#ffddb7",
-        "secondary-fixed-dim": "#ffb95e",
+        "secondary-container": "#fed65b",
+        "on-secondary-container": "#745c00",
+        "secondary-fixed": "#e9c349",
+        "secondary-fixed-dim": "#c9a430",
         "on-secondary-fixed": "#2a1700",
         "on-secondary-fixed-variant": "#653e00",
 
@@ -94,14 +94,14 @@ const config: Config = {
       // ─── Typography ───────────────────────────────────────────────────────
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
-        display: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        display: ["Inter", "system-ui", "sans-serif"],
         "label-sm": ["Inter", "sans-serif"],
         "label-md": ["Inter", "sans-serif"],
         "body-md": ["Inter", "sans-serif"],
         "body-lg": ["Inter", "sans-serif"],
-        "headline-md": ["Plus Jakarta Sans", "sans-serif"],
-        "headline-lg": ["Plus Jakarta Sans", "sans-serif"],
-        "headline-xl": ["Plus Jakarta Sans", "sans-serif"],
+        "headline-md": ["Inter", "sans-serif"],
+        "headline-lg": ["Inter", "sans-serif"],
+        "headline-xl": ["Inter", "sans-serif"],
       },
       fontSize: {
         "label-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }],
@@ -128,11 +128,12 @@ const config: Config = {
 
       // ─── Border radius ────────────────────────────────────────────────────
       borderRadius: {
-        DEFAULT: "0.25rem",
-        sm: "calc(var(--radius) - 4px)",
-        md: "calc(var(--radius) - 2px)",
-        lg: "var(--radius)",
-        xl: "0.75rem",
+        DEFAULT: "0.125rem",
+        sm: "0.125rem",
+        md: "0.25rem",
+        lg: "0.375rem",
+        xl: "0.5rem",
+        "2xl": "0.75rem",
         full: "9999px",
       },
 

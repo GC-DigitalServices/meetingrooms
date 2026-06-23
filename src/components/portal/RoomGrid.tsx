@@ -49,13 +49,10 @@ function buildInitialMap(bookings: BookingSlot[]): BookingsMap {
   return map;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Round up to the next 15-minute slot, clamped to 07:00–20:00. */
 function nextQuarterHour() {
   const d = new Date();
   const m = Math.ceil(d.getMinutes() / 15) * 15;
@@ -70,7 +67,6 @@ function addHours(time: string, h: number) {
   return `${String(total % 24).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-/** "Free until HH:MM" or "Free all day" */
 function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
   const today = now.toISOString().slice(0, 10);
   const next = bookings
@@ -80,7 +76,6 @@ function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
   return `Free until ${localTime(next.startUtc)}`;
 }
 
-/** "Busy until HH:MM" */
 function busyUntilLabel(bookings: BookingSlot[], now: Date): string {
   const current = bookings.find(
     b => new Date(b.startUtc) <= now && new Date(b.endUtc) > now
@@ -88,7 +83,6 @@ function busyUntilLabel(bookings: BookingSlot[], now: Date): string {
   return current ? `Busy until ${localTime(current.endUtc)}` : "";
 }
 
-/** "Booked at HH:MM" — for rooms with a booking starting within 30 min */
 function bookedAtLabel(bookings: BookingSlot[], now: Date): string {
   const soon = new Date(now.getTime() + 30 * 60 * 1000);
   const next = bookings
@@ -97,13 +91,10 @@ function bookedAtLabel(bookings: BookingSlot[], now: Date): string {
   return next ? `Booked at ${localTime(next.startUtc)}` : "";
 }
 
-// ─── Main component ──────────────────────────────────────────────────────────
-
 export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, permittedRoomIds }: Props) {
   const { socket } = useSocket();
   const [bookingsMap, dispatch] = useReducer(reducer, initialBookings, buildInitialMap);
 
-  // Search / filter state
   const [filterDate, setFilterDate] = useState(todayStr);
   const [filterFrom, setFilterFrom] = useState(nextQuarterHour);
   const [filterTo, setFilterTo] = useState(() => addHours(nextQuarterHour(), 1));
@@ -111,10 +102,8 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const [minCapacity, setMinCapacity] = useState(0);
   const [showAll, setShowAll] = useState(false);
 
-  // Availability data fetched from API
   const [avail, setAvail] = useState<Record<string, RoomAvailability>>({});
 
-  // Favourites — persisted in localStorage
   const [favourites, setFavourites] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -136,7 +125,6 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
   const permitted = new Set(permittedRoomIds);
 
-  // ─── Socket subscriptions ────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
     const roomIds = rooms.map(r => r.id);
@@ -155,7 +143,6 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
-  // ─── Fetch availability whenever date/time changes ──────────────────────
   const fetchAvailability = useCallback(async () => {
     try {
       const from = new Date(`${filterDate}T${filterFrom}:00`).toISOString();
@@ -167,18 +154,16 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
   useEffect(() => { void fetchAvailability(); }, [fetchAvailability]);
 
-  // Ensure filterTo is always after filterFrom
   useEffect(() => {
     if (filterTo <= filterFrom) setFilterTo(addHours(filterFrom, 1));
   }, [filterFrom, filterTo]);
 
   const now = new Date();
 
-  // ─── Filter & sort ───────────────────────────────────────────────────────
   const filtered = rooms
     .filter(r => {
       if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
-if (r.capacity < minCapacity) return false;
+      if (r.capacity < minCapacity) return false;
       if (onlyFree && avail[r.id] && !avail[r.id].free) return false;
       return true;
     })
@@ -196,7 +181,6 @@ if (r.capacity < minCapacity) return false;
 
   const freeCount = filtered.filter(r => avail[r.id]?.free !== false).length;
 
-  // ─── Time select options ─────────────────────────────────────────────────
   const TIME_OPTIONS = Array.from({ length: 57 }, (_, i) => {
     const m = 7 * 60 + i * 15;
     if (m > 21 * 60) return null;
@@ -205,136 +189,148 @@ if (r.capacity < minCapacity) return false;
     return `${h}:${min}`;
   }).filter(Boolean) as string[];
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  const dateLabel = filterDate === todayStr()
+    ? "Today"
+    : new Date(filterDate + "T12:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
   return (
-    <div>
-      {/* Page heading */}
-      <div className="mb-lg">
-        <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-2">Meeting Room Finder</h1>
-      </div>
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-gutter">
-        {/* Filter panel */}
-        <div className="xl:col-span-3">
-          <section className="bg-white rounded-xl shadow-card p-md border border-surface-container-highest">
-            <h3 className="font-display font-semibold text-headline-md mb-md">Refine Search</h3>
-
-            <div className="space-y-md">
-              {/* ── When? ── */}
-              <div>
-                <label className="text-label-md font-label-md text-on-surface-variant block mb-2">When do you need it?</label>
-                <div className="space-y-2">
-                  <input
-                    type="date"
-                    className="w-full rounded-xl border border-outline-variant bg-background px-3 py-2 text-label-md font-label-md focus:outline-none focus:ring-2 focus:ring-primary"
-                    value={filterDate}
-                    min={todayStr()}
-                    onChange={e => setFilterDate(e.target.value)}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-label-sm font-label-sm text-on-surface-variant mb-1">From</p>
-                      <select
-                        className="w-full rounded-xl border border-outline-variant bg-background px-2 py-2 text-label-md font-label-md focus:outline-none focus:ring-2 focus:ring-primary"
-                        value={filterFrom}
-                        onChange={e => setFilterFrom(e.target.value)}
-                      >
-                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <p className="text-label-sm font-label-sm text-on-surface-variant mb-1">To</p>
-                      <select
-                        className="w-full rounded-xl border border-outline-variant bg-background px-2 py-2 text-label-md font-label-md focus:outline-none focus:ring-2 focus:ring-primary"
-                        value={filterTo}
-                        onChange={e => setFilterTo(e.target.value)}
-                      >
-                        {TIME_OPTIONS.filter(t => t > filterFrom).map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Only show free toggle */}
-                  <button
-                    onClick={() => setOnlyFree(v => !v)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-label-md font-label-md transition-colors ${
-                      onlyFree ? "border-2 border-primary bg-primary/5 text-primary" : "border-outline-variant text-on-surface-variant hover:border-primary"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base">{onlyFree ? "check_box" : "check_box_outline_blank"}</span>
-                    Show only available meeting rooms
-                  </button>
-                </div>
-              </div>
-
-              {/* ── Capacity ── */}
-              <div>
-                <label className="text-label-md font-label-md text-on-surface-variant block mb-2">Minimum capacity</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[0, 4, 10, 20].map(cap => (
-                    <button
-                      key={cap}
-                      onClick={() => setMinCapacity(cap)}
-                      className={`p-2.5 rounded-xl text-label-sm font-label-sm border transition-colors ${
-                        minCapacity === cap ? "border-2 border-primary bg-primary/5 text-primary font-bold" : "border-outline-variant hover:border-primary"
-                      }`}
-                    >
-                      {cap === 0 ? "Any" : `${cap}+`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Show all for non-staff */}
-              {!isStaff && !isAdmin && (
-                <button
-                  onClick={() => setShowAll(v => !v)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-label-md font-label-md transition-colors ${
-                    showAll ? "border-2 border-primary bg-primary/5 text-primary" : "border-outline-variant text-on-surface-variant hover:border-primary"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base">{showAll ? "check_box" : "check_box_outline_blank"}</span>
-                  Show all meeting rooms
-                </button>
-              )}
-            </div>
-          </section>
+    <div className="flex h-[calc(100vh-80px)] overflow-hidden">
+      {/* ── Left filter sidebar ─────────────────────────────────── */}
+      <aside className="w-80 flex-shrink-0 border-r border-outline-variant/30 bg-surface-container-low flex flex-col overflow-hidden">
+        {/* Sidebar header */}
+        <div className="bg-primary px-5 py-4">
+          <h2 className="text-on-primary font-bold text-base">Meeting Room Finder</h2>
+          <p className="text-on-primary/60 text-xs mt-0.5">Find &amp; book a room</p>
         </div>
 
-        {/* Room cards */}
-        <div className="xl:col-span-9">
-          <div className="flex justify-between items-center mb-md">
+        {/* Filter content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+          {/* Date */}
+          <div>
+            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Date</label>
+            <input
+              type="date"
+              className="w-full rounded border border-outline-variant bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              value={filterDate}
+              min={todayStr()}
+              onChange={e => setFilterDate(e.target.value)}
+            />
+          </div>
+
+          {/* Time */}
+          <div>
+            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Time</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="text-xs text-on-surface-variant mb-1">From</p>
+                <select
+                  className="w-full rounded border border-outline-variant bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={filterFrom}
+                  onChange={e => setFilterFrom(e.target.value)}
+                >
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="text-xs text-on-surface-variant mb-1">To</p>
+                <select
+                  className="w-full rounded border border-outline-variant bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={filterTo}
+                  onChange={e => setFilterTo(e.target.value)}
+                >
+                  {TIME_OPTIONS.filter(t => t > filterFrom).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Availability */}
+          <div>
+            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Availability</label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyFree}
+                onChange={e => setOnlyFree(e.target.checked)}
+                className="w-4 h-4 rounded accent-primary"
+              />
+              <span className="text-sm text-on-surface">Show only available</span>
+            </label>
+            {!isStaff && !isAdmin && (
+              <label className="flex items-center gap-3 cursor-pointer mt-2">
+                <input
+                  type="checkbox"
+                  checked={showAll}
+                  onChange={e => setShowAll(e.target.checked)}
+                  className="w-4 h-4 rounded accent-primary"
+                />
+                <span className="text-sm text-on-surface">Show all rooms</span>
+              </label>
+            )}
+          </div>
+
+          {/* Capacity */}
+          <div>
+            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Capacity</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[0, 4, 10, 20].map(cap => (
+                <button
+                  key={cap}
+                  onClick={() => setMinCapacity(cap)}
+                  className={`py-2 text-sm rounded border transition-colors ${
+                    minCapacity === cap
+                      ? "border-primary bg-primary text-on-primary font-semibold"
+                      : "border-outline-variant hover:border-primary text-on-surface-variant"
+                  }`}
+                >
+                  {cap === 0 ? "Any" : `${cap}+`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Apply button */}
+        <div className="p-4 border-t border-outline-variant/30">
+          <button
+            onClick={() => void fetchAvailability()}
+            className="w-full bg-primary text-on-primary py-2.5 rounded font-semibold text-sm hover:bg-primary-container transition-colors"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main content ──────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="px-margin-desktop pt-lg pb-24 sm:pb-lg">
+          {/* Result header */}
+          <div className="flex justify-between items-end mb-md">
             <div>
-              <h2 className="font-display font-semibold text-headline-md">
-                {freeCount} meeting room{freeCount !== 1 ? "s" : ""} available
-              </h2>
-              <p className="text-label-md font-label-md text-on-surface-variant">
-                {filterDate === todayStr()
-                  ? `${filterFrom} – ${filterTo} today`
-                  : `${new Date(filterDate + "T12:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}, ${filterFrom} – ${filterTo}`}
+              <h1 className="font-bold text-2xl text-on-background">
+                {freeCount} room{freeCount !== 1 ? "s" : ""} available
+              </h1>
+              <p className="text-sm text-on-surface-variant mt-0.5">
+                {dateLabel}, {filterFrom} – {filterTo}
               </p>
             </div>
-            <p className="text-label-md font-label-md text-on-surface-variant">{filtered.length} shown</p>
+            <p className="text-sm text-on-surface-variant">{filtered.length} shown</p>
           </div>
 
           {filtered.length === 0 ? (
-            <div className="bg-white rounded-xl border border-surface-container-highest shadow-card p-lg text-center">
+            <div className="bg-white rounded-xl border border-outline-variant/30 shadow-card p-lg text-center">
               <span className="material-symbols-outlined text-5xl text-outline mb-4 block">search_off</span>
-              <p className="text-body-md text-on-surface-variant">No meeting rooms match your filters.</p>
+              <p className="text-on-surface-variant">No meeting rooms match your filters.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-gutter">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-gutter">
               {filtered.map(room => {
                 const bk = bookingsMap[room.id] ?? [];
                 const status = computeRoomStatus(bk, now);
-
                 const nextLabel =
-                  status === "busy"
-                    ? busyUntilLabel(bk, now)
-                    : status === "soon"
-                    ? bookedAtLabel(bk, now)
-                    : freeUntilLabel(bk, now);
+                  status === "busy" ? busyUntilLabel(bk, now)
+                  : status === "soon" ? bookedAtLabel(bk, now)
+                  : freeUntilLabel(bk, now);
 
                 return (
                   <RoomCard
@@ -353,6 +349,11 @@ if (r.capacity < minCapacity) return false;
               })}
             </div>
           )}
+
+          {/* Footer */}
+          <footer className="mt-16 pt-8 border-t border-outline-variant/30 text-center text-xs text-on-surface-variant">
+            <p>© {new Date().getFullYear()} Greenhead College · Room Booking Platform</p>
+          </footer>
         </div>
       </div>
     </div>

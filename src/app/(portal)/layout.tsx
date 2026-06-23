@@ -41,14 +41,9 @@ export default async function PortalLayout({ children }: { children: React.React
         <ConnectionBanner />
 
         {/* Main content */}
-        <main className="p-margin-mobile md:p-lg pb-24 min-h-[calc(100vh-72px)]">
+        <main className="pt-20 min-h-screen pb-24 sm:pb-0">
           {children}
         </main>
-
-        {/* Footer */}
-        <footer className="border-t px-margin-mobile md:px-margin-desktop py-4 text-xs text-muted-foreground">
-          Room Booking Platform · Greenhead College
-        </footer>
 
         {/* Mobile bottom navigation */}
         <BottomNav />

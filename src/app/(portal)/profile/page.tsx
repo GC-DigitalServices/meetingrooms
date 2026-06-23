@@ -14,6 +14,7 @@ export default async function ProfilePage() {
   const user = await db.user.findUnique({ where: { upn: session.upn } });
 
   return (
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
     <div className="max-w-md">
       <h1 className="text-2xl font-semibold tracking-tight mb-6">Profile</h1>
 
@@ -55,6 +56,7 @@ export default async function ProfilePage() {
           your bookings
         </Link>
       </p>
+    </div>
     </div>
   );
 }

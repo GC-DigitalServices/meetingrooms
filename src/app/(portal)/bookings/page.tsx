@@ -80,16 +80,19 @@ export default function MyBookingsPage() {
 
   if (bookings === null) {
     return (
-      <div className="max-w-xl space-y-4">
-        <Skeleton className="h-6 w-48" />
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 rounded-lg" />
-        ))}
+      <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
+        <div className="max-w-xl space-y-4">
+          <Skeleton className="h-6 w-48" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
+    <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
     <div className="max-w-xl">
       <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">My Bookings</h1>
 
@@ -187,6 +190,7 @@ export default function MyBookingsPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+    </div>
     </div>
   );
 }
