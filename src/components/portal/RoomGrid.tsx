@@ -69,25 +69,31 @@ function addHours(time: string, h: number) {
   return `${String(total % 24).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-/** The label shown next to available rooms on the card. */
-function nextBookingLabel(bookings: BookingSlot[], now: Date): string {
-  const future = bookings
-    .map(b => ({ ...b, start: new Date(b.startUtc), end: new Date(b.endUtc) }))
-    .filter(b => b.start > now)
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-  if (future.length === 0) return "No more bookings today";
-  const next = future[0];
-  const sameDay = next.startUtc.slice(0, 10) === todayStr();
-  return sameDay ? `Next: ${localTime(next.startUtc)} – ${localTime(next.endUtc)}` : "Free rest of day";
+/** "Free until HH:MM" or "Free all day" */
+function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
+  const today = now.toISOString().slice(0, 10);
+  const next = bookings
+    .filter(b => new Date(b.startUtc) > now)
+    .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
+  if (!next || next.startUtc.slice(0, 10) !== today) return "Free all day";
+  return `Free until ${localTime(next.startUtc)}`;
 }
 
-/** The label shown on busy cards. */
-function freeFromLabel(bookings: BookingSlot[], now: Date): string {
+/** "Busy until HH:MM" */
+function busyUntilLabel(bookings: BookingSlot[], now: Date): string {
   const current = bookings.find(
     b => new Date(b.startUtc) <= now && new Date(b.endUtc) > now
   );
-  return current ? `Free from ${localTime(current.endUtc)}` : "";
+  return current ? `Busy until ${localTime(current.endUtc)}` : "";
+}
+
+/** "Booked at HH:MM" — for rooms with a booking starting within 30 min */
+function bookedAtLabel(bookings: BookingSlot[], now: Date): string {
+  const soon = new Date(now.getTime() + 30 * 60 * 1000);
+  const next = bookings
+    .filter(b => new Date(b.startUtc) > now && new Date(b.startUtc) <= soon)
+    .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
+  return next ? `Booked at ${localTime(next.startUtc)}` : "";
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -107,6 +113,26 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
   // Availability data fetched from API
   const [avail, setAvail] = useState<Record<string, RoomAvailability>>({});
+
+  // Favourites — persisted in localStorage
+  const [favourites, setFavourites] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = localStorage.getItem("mrbs:fav");
+      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  function toggleFavourite(roomId: string) {
+    setFavourites(prev => {
+      const next = new Set(prev);
+      if (next.has(roomId)) next.delete(roomId); else next.add(roomId);
+      try { localStorage.setItem("mrbs:fav", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   const permitted = new Set(permittedRoomIds);
 
@@ -158,6 +184,10 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
       return true;
     })
     .sort((a, b) => {
+      const afav = favourites.has(a.id);
+      const bfav = favourites.has(b.id);
+      if (afav && !bfav) return -1;
+      if (!afav && bfav) return 1;
       const af = avail[a.id]?.free !== false;
       const bf = avail[b.id]?.free !== false;
       if (af && !bf) return -1;
@@ -310,12 +340,13 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
               {filtered.map(room => {
                 const bk = bookingsMap[room.id] ?? [];
                 const status = computeRoomStatus(bk, now);
-                const statusLabel = avail[room.id]?.free === false ? "busy" : status;
 
                 const nextLabel =
-                  statusLabel === "busy"
-                    ? freeFromLabel(bk, now)
-                    : nextBookingLabel(bk, now);
+                  status === "busy"
+                    ? busyUntilLabel(bk, now)
+                    : status === "soon"
+                    ? bookedAtLabel(bk, now)
+                    : freeUntilLabel(bk, now);
 
                 return (
                   <RoomCard
@@ -324,9 +355,11 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
                     bookings={bk}
                     canBook={permitted.has(room.id)}
                     nextLabel={nextLabel}
-                    filterDate={filterDate !== todayStr() ? filterDate : undefined}
-                    filterStart={filterDate !== todayStr() ? filterFrom : undefined}
-                    filterEnd={filterDate !== todayStr() ? filterTo : undefined}
+                    filterDate={filterDate}
+                    filterStart={filterFrom}
+                    filterEnd={filterTo}
+                    isFavourite={favourites.has(room.id)}
+                    onToggleFavourite={() => toggleFavourite(room.id)}
                   />
                 );
               })}

@@ -33,12 +33,14 @@ interface Props {
   room: Room;
   bookings: BookingSlot[];
   canBook: boolean;
-  /** e.g. "Next: 14:00 – 15:00" or "Free from 15:30" — shown below status */
+  /** e.g. "Free until 14:30" or "Busy until 15:00" — shown below status */
   nextLabel?: string;
   /** Pre-fill dialog with the grid's selected date (YYYY-MM-DD) if set */
   filterDate?: string;
   filterStart?: string;
   filterEnd?: string;
+  isFavourite?: boolean;
+  onToggleFavourite?: () => void;
 }
 
 const EQUIP_ICON: Record<string, string> = {
@@ -64,7 +66,17 @@ const BUILDING_ICON: Record<string, string> = {
   Dawson: "architecture",
 };
 
-export default function RoomCard({ room, bookings, canBook, nextLabel, filterDate, filterStart, filterEnd }: Props) {
+export default function RoomCard({
+  room,
+  bookings,
+  canBook,
+  nextLabel,
+  filterDate,
+  filterStart,
+  filterEnd,
+  isFavourite,
+  onToggleFavourite,
+}: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const status = computeRoomStatus(bookings);
@@ -75,6 +87,10 @@ export default function RoomCard({ room, bookings, canBook, nextLabel, filterDat
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
   const gradient = KIND_GRADIENT[room.kind] ?? KIND_GRADIENT.STANDARD;
   const buildingIcon = (room.building && BUILDING_ICON[room.building]) ?? "meeting_room";
+
+  const bookLabel = filterStart && filterEnd
+    ? `Book ${filterStart} – ${filterEnd}`
+    : "Reserve Meeting Room";
 
   return (
     <>
@@ -90,6 +106,18 @@ export default function RoomCard({ room, bookings, canBook, nextLabel, filterDat
               </span>
             )}
           </div>
+          {/* Favourite star button */}
+          {onToggleFavourite && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavourite(); }}
+              className="absolute top-3 left-3 z-10 p-1.5 rounded-full transition-colors bg-black/10 hover:bg-black/30"
+              aria-label={isFavourite ? "Remove from favourites" : "Add to favourites"}
+            >
+              <span className={`material-symbols-outlined text-sm ${isFavourite ? "text-yellow-300" : "text-white/50"}`}>
+                {isFavourite ? "star" : "star_outline"}
+              </span>
+            </button>
+          )}
           <div className="absolute top-3 right-3">
             <StatusPill status={status} />
           </div>
@@ -130,7 +158,7 @@ export default function RoomCard({ room, bookings, canBook, nextLabel, filterDat
               onClick={() => setDialogOpen(true)}
               className="w-full bg-secondary-container text-on-secondary-container py-3 rounded-xl font-bold text-label-md hover:opacity-90 active:scale-95 transition-all"
             >
-              Reserve Meeting Room
+              {bookLabel}
             </button>
           ) : (
             <Link

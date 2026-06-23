@@ -29,4 +29,5 @@ export const graphClient: typeof RealClient = {
   post: <T>(path: string) => lookup<T>(`POST ${path}`),
   patch: <T>(path: string) => lookup<T>(`PATCH ${path}`),
   delete: (path: string) => lookup<void>(`DELETE ${path}`),
+  getRawResponse: (path: string) => lookup<Response>(`RAW ${path}`),
 };

@@ -4,7 +4,7 @@ import { getServerSession } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
 import { canSeeRoom, bookingDetailVisibility } from "@/lib/booking/visibility";
 import { canUserBookRoom } from "@/lib/booking/permissions";
-import BookingTimeline from "@/components/portal/BookingTimeline";
+import DayTimeline from "@/components/portal/DayTimeline";
 import { Badge } from "@/components/ui/badge";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
@@ -95,7 +95,7 @@ export default async function RoomDetailPage({
         </div>
       </div>
 
-      <BookingTimeline
+      <DayTimeline
         room={{ id: room.id, displayName: room.displayName, kind: room.kind }}
         initialBookings={initialBookings}
         canBook={canBook}
