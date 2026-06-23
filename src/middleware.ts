@@ -9,6 +9,7 @@ const PUBLIC_PREFIXES = [
   "/api/health",
   "/api/qr",
   "/api/devices/",   // device-auth'd routes handle their own auth
+  "/api/webhooks/",  // Graph validation requests arrive with no session cookie
   "/display",        // device-token auth, no session cookie
   "/_next/",
   "/favicon.ico",
