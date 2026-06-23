@@ -68,8 +68,26 @@ export async function renewExpiringSubscriptions(): Promise<{ renewed: number; f
       logger.info({ subscriptionId: sub.id }, "graph: subscription renewed");
       renewed++;
     } catch (err) {
-      logger.error({ subscriptionId: sub.id, err }, "graph: failed to renew subscription");
-      failed++;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isGone = msg.includes("HTTP 404") || msg.includes("HTTP 410");
+
+      if (isGone) {
+        // Subscription no longer exists on Graph (expired while app was down).
+        // Delete the stale DB record and recreate it.
+        logger.warn({ subscriptionId: sub.id }, "graph: subscription gone, recreating");
+        try {
+          await db.graphSubscription.delete({ where: { id: sub.id } });
+          await createSubscriptionForRoom(sub.roomId);
+          logger.info({ subscriptionId: sub.id, roomId: sub.roomId }, "graph: subscription recreated");
+          renewed++;
+        } catch (recreateErr) {
+          logger.error({ subscriptionId: sub.id, roomId: sub.roomId, err: recreateErr }, "graph: failed to recreate subscription");
+          failed++;
+        }
+      } else {
+        logger.error({ subscriptionId: sub.id, err }, "graph: failed to renew subscription");
+        failed++;
+      }
     }
   }
 
