@@ -44,7 +44,13 @@ const EQUIP_ICON: Record<string, string> = {
 };
 
 const BUILDING_ICON: Record<string, string> = {
-  Cooksey: "science", Dawson: "architecture",
+  Hirst: "science",
+  Cooksey: "palette",
+  Conway: "people",
+  Dawson: "menu_book",
+  Main: "terminal",
+  Park: "fitness_center",
+  Rostron: "calculate",
 };
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
