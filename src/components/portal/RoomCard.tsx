@@ -7,6 +7,18 @@ import BookingDialog from "./BookingDialog";
 import { computeRoomStatus } from "@/lib/booking/status";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
+function fmtTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  }).format(new Date(iso));
+}
+
+function toLocalDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(iso));
+}
+
 interface Room {
   id: string;
   displayName: string;
@@ -54,7 +66,13 @@ const BUILDING_ICON: Record<string, string> = {
 
 export default function RoomCard({ room, bookings, canBook, nextLabel, filterDate, filterStart, filterEnd }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const status = computeRoomStatus(bookings);
+
+  const scheduleDate = filterDate ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
+  const todayBookings = bookings
+    .filter((b) => toLocalDate(b.startUtc) === scheduleDate)
+    .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
   const gradient = KIND_GRADIENT[room.kind] ?? KIND_GRADIENT.STANDARD;
   const buildingIcon = (room.building && BUILDING_ICON[room.building]) ?? "meeting_room";
 
@@ -121,6 +139,35 @@ export default function RoomCard({ room, bookings, canBook, nextLabel, filterDat
             >
               View Schedule
             </Link>
+          )}
+
+          <button
+            onClick={() => setShowSchedule((v) => !v)}
+            className="mt-2 w-full flex items-center justify-center gap-1 py-1 text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">
+              {showSchedule ? "expand_less" : "expand_more"}
+            </span>
+            {showSchedule ? "Hide" : "Today's schedule"}
+          </button>
+
+          {showSchedule && (
+            <div className="mt-1 space-y-1 border-t pt-2">
+              {todayBookings.length === 0 ? (
+                <p className="py-1 text-center text-xs text-on-surface-variant">Free all day</p>
+              ) : (
+                todayBookings.map((b) => (
+                  <div key={b.id} className="flex items-baseline justify-between text-xs">
+                    <span className="text-on-surface-variant whitespace-nowrap">
+                      {fmtTime(b.startUtc)}–{fmtTime(b.endUtc)}
+                    </span>
+                    {b.visibility === "full" && b.subject && (
+                      <span className="ml-2 truncate text-on-surface max-w-[130px]">{b.subject}</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
       </div>

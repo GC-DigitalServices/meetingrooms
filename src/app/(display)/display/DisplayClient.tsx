@@ -555,6 +555,19 @@ export default function DisplayClient() {
     return () => { if (qrTimerRef.current) clearTimeout(qrTimerRef.current); };
   }, [deviceToken, roomInfo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-fetch QR immediately when the screen wakes from sleep/backgrounding
+  useEffect(() => {
+    if (!deviceToken || !roomInfo) return;
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        if (qrTimerRef.current) clearTimeout(qrTimerRef.current);
+        fetchQrToken();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [deviceToken, roomInfo, fetchQrToken]);
+
   // Socket.IO connection
   useEffect(() => {
     if (!deviceToken || !roomInfo) return;

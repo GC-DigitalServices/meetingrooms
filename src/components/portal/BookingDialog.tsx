@@ -79,6 +79,8 @@ export default function BookingDialog({
   const [assistanceNotes, setAssistanceNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+  const [premisesError, setPremisesError] = useState<string | null>(null);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
 
@@ -95,10 +97,34 @@ export default function BookingDialog({
       setNeedAssistance(false);
       setAssistanceNotes("");
       setError(null);
+      setConflictWarning(null);
+      setPremisesError(null);
       setRepeatWeekly(false);
       setRepeatWeeks(4);
     }
   }, [open, date, initialStart, initialEnd]);
+
+  // Inline conflict check — debounced 600ms after time/date changes
+  useEffect(() => {
+    if (!open) return;
+    setConflictWarning(null);
+    const from = toUTC(selectedDate, startTime);
+    const to = toUTC(selectedDate, endTime);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+        );
+        if (!res.ok) return;
+        const data = await res.json() as Record<string, { free: boolean }>;
+        const info = data[roomId];
+        if (info && !info.free) {
+          setConflictWarning("This time slot is already booked.");
+        }
+      } catch { /* silently fail */ }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [open, selectedDate, startTime, endTime, roomId]);
 
   // Keep endTime always after startTime
   useEffect(() => {
@@ -230,6 +256,7 @@ export default function BookingDialog({
               value={selectedDate}
               min={minDate()}
               max={maxDate()}
+              disabled={submitting}
               onChange={(e) => setSelectedDate(e.target.value)}
             />
           </div>
@@ -241,6 +268,7 @@ export default function BookingDialog({
                 id="bd-start"
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 value={startTime}
+                disabled={submitting}
                 onChange={(e) => setStartTime(e.target.value)}
               >
                 {TIME_OPTIONS.map((t) => (
@@ -256,6 +284,7 @@ export default function BookingDialog({
                 id="bd-end"
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 value={endTime}
+                disabled={submitting}
                 onChange={(e) => setEndTime(e.target.value)}
               >
                 {endOptions.map((t) => (
@@ -267,6 +296,13 @@ export default function BookingDialog({
             </div>
           </div>
 
+          {conflictWarning && (
+            <p className="flex items-center gap-1 text-sm text-amber-600">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              {conflictWarning}
+            </p>
+          )}
+
           <div>
             <Label htmlFor="bd-subject">
               Subject <span className="text-destructive">*</span>
@@ -277,6 +313,7 @@ export default function BookingDialog({
               placeholder="e.g. Year 10 Physics"
               maxLength={100}
               value={subject}
+              disabled={submitting}
               onChange={(e) => setSubject(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
@@ -292,8 +329,16 @@ export default function BookingDialog({
                 className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm min-h-[72px] focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder="e.g. Harrogate Leisure Centre — 12 students — Mr Smith"
                 value={premisesNotes}
-                onChange={(e) => setPremisesNotes(e.target.value)}
+                disabled={submitting}
+                onChange={(e) => {
+                  setPremisesNotes(e.target.value);
+                  if (premisesError && e.target.value.trim()) setPremisesError(null);
+                }}
+                onBlur={() => {
+                  if (!premisesNotes.trim()) setPremisesError("Destination, passengers and driver name are required.");
+                }}
               />
+              {premisesError && <p className="mt-1 text-sm text-destructive">{premisesError}</p>}
             </div>
           )}
 
@@ -303,6 +348,7 @@ export default function BookingDialog({
               <button
                 type="button"
                 onClick={() => setNeedAssistance((v) => !v)}
+                disabled={submitting}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
                   needAssistance
                     ? "border-primary bg-primary/5 text-primary"
@@ -324,6 +370,7 @@ export default function BookingDialog({
                     className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-ring"
                     placeholder="e.g. Please set up the projector and arrange chairs in a horseshoe layout for 20 people"
                     value={assistanceNotes}
+                    disabled={submitting}
                     onChange={(e) => setAssistanceNotes(e.target.value)}
                   />
                   <p className="text-label-sm font-label-sm text-on-surface-variant">
@@ -340,6 +387,7 @@ export default function BookingDialog({
               <button
                 type="button"
                 onClick={() => setRepeatWeekly((v) => !v)}
+                disabled={submitting}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
                   repeatWeekly
                     ? "border-primary bg-primary/5 text-primary"
@@ -362,6 +410,7 @@ export default function BookingDialog({
                     <select
                       className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={repeatWeeks}
+                      disabled={submitting}
                       onChange={(e) => setRepeatWeeks(Number(e.target.value))}
                     >
                       {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (

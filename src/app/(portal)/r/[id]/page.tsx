@@ -135,6 +135,11 @@ export default async function QrLandingPage({
                       Free now
                     </Badge>
                   )}
+                  {section.capacity > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {section.capacity} {section.capacity === 1 ? "person" : "people"}
+                    </span>
+                  )}
                   {!canBook && (
                     <span className="text-xs text-muted-foreground">
                       Not available to you

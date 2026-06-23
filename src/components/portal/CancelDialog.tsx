@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -18,18 +19,25 @@ interface Props {
   onClose: () => void;
   bookingId: string;
   roomName: string;
+  roomId?: string;
   onSuccess?: () => void;
 }
 
-export default function CancelDialog({ open, onClose, bookingId, roomName, onSuccess }: Props) {
+export default function CancelDialog({ open, onClose, bookingId, roomName, roomId, onSuccess }: Props) {
   const [cancelling, setCancelling] = useState(false);
+  const router = useRouter();
 
   async function handleConfirm() {
     setCancelling(true);
     try {
       const res = await fetch(`/api/bookings/${bookingId}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success("Booking cancelled");
+        toast.success("Booking cancelled", roomId ? {
+          action: {
+            label: "Book again",
+            onClick: () => router.push(`/rooms/${roomId}`),
+          },
+        } : undefined);
         onSuccess?.();
         onClose();
       } else {

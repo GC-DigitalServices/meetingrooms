@@ -40,7 +40,7 @@ function groupByDay(bookings: BookingRow[]): [string, BookingRow[]][] {
 
 export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string; roomId: string } | null>(null);
   const [cancelRecurringTarget, setCancelRecurringTarget] = useState<{ groupId: string; roomName: string; count: number } | null>(null);
   const [cancellingAll, setCancellingAll] = useState(false);
 
@@ -112,7 +112,7 @@ export default function MyBookingsPage() {
                   <BookingRow
                     key={b.id}
                     booking={b}
-                    onCancel={() => setCancelTarget({ id: b.id, roomName: b.room.displayName })}
+                    onCancel={() => setCancelTarget({ id: b.id, roomName: b.room.displayName, roomId: b.room.id })}
                     onCancelRemaining={
                       b.recurringGroupId
                         ? () => {
@@ -160,6 +160,7 @@ export default function MyBookingsPage() {
           onClose={() => setCancelTarget(null)}
           bookingId={cancelTarget.id}
           roomName={cancelTarget.roomName}
+          roomId={cancelTarget.roomId}
           onSuccess={load}
         />
       )}
