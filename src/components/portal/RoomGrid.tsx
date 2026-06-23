@@ -197,14 +197,9 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
     <div className="flex h-[calc(100vh-80px)] overflow-hidden">
       {/* ── Left filter sidebar ─────────────────────────────────── */}
       <aside className="w-80 flex-shrink-0 border-r border-outline-variant/30 bg-surface-container-low flex flex-col overflow-hidden">
-        {/* Sidebar header */}
-        <div className="bg-primary px-5 py-4">
-          <h2 className="text-on-primary font-bold text-base">Meeting Room Finder</h2>
-          <p className="text-on-primary/60 text-xs mt-0.5">Find &amp; book a room</p>
-        </div>
-
         {/* Filter content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+          <h2 className="font-bold text-base text-on-background">Search Filters</h2>
           {/* Date */}
           <div>
             <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Date</label>
@@ -304,6 +299,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
       {/* ── Main content ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="px-margin-desktop pt-lg pb-24 sm:pb-lg">
+          <h1 className="font-extrabold text-headline-xl text-on-background mb-lg">Meeting Room Finder</h1>
           {/* Result header */}
           <div className="flex justify-between items-end mb-md">
             <div>
