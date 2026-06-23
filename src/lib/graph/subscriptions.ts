@@ -22,14 +22,24 @@ export async function createSubscriptionForRoom(roomId: string): Promise<void> {
 
   const clientState = randomBytes(32).toString("hex");
   const cfg = getConfig();
+  const notificationUrl = `${cfg.PUBLIC_BASE_URL}/api/webhooks/graph`;
 
-  const sub = await graphClient.post<GraphSubscriptionResponse>("/subscriptions", {
-    changeType: "created,updated,deleted",
-    notificationUrl: `${cfg.PUBLIC_BASE_URL}/api/webhooks/graph`,
-    resource: `/users/${room.mailboxUpn}/events`,
-    expirationDateTime: expirationDateTime(),
-    clientState,
-  });
+  logger.info({ roomId, mailboxUpn: room.mailboxUpn, notificationUrl }, "graph: creating subscription");
+
+  let sub: GraphSubscriptionResponse;
+  try {
+    sub = await graphClient.post<GraphSubscriptionResponse>("/subscriptions", {
+      changeType: "created,updated,deleted",
+      notificationUrl,
+      resource: `/users/${room.mailboxUpn}/events`,
+      expirationDateTime: expirationDateTime(),
+      clientState,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ roomId, mailboxUpn: room.mailboxUpn, notificationUrl, graphError: msg }, `graph: subscription create failed — ${msg}`);
+    throw err;
+  }
 
   await db.graphSubscription.create({
     data: {
