@@ -21,7 +21,7 @@ export default async function AdminPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">Admin</h1>
+      <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">Admin</h1>
 
       {expiringSoon > 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">

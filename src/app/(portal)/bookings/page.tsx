@@ -91,7 +91,7 @@ export default function MyBookingsPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">My Bookings</h1>
+      <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">My Bookings</h1>
 
       {upcomingGroups.length === 0 ? (
         <p className="text-muted-foreground text-sm">
