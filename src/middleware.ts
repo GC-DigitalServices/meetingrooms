@@ -50,9 +50,14 @@ export function middleware(req: NextRequest): NextResponse {
   // don't waste a nonce, and so the redirect itself carries no stale headers.
   const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
   if (!isPublic && !req.cookies.get("session")?.value) {
+    // Attempt silent SSO first — if the user is already signed into O365 in this
+    // browser, Azure AD will return a code immediately and they land on their page
+    // without ever seeing the sign-in screen. If not, the callback falls back to
+    // /sign-in where they can click the button.
     const url = req.nextUrl.clone();
-    url.pathname = "/sign-in";
+    url.pathname = "/api/auth/login";
     url.searchParams.set("next", pathname);
+    url.searchParams.set("prompt", "none");
     return NextResponse.redirect(url);
   }
 

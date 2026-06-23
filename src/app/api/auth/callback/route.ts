@@ -49,11 +49,30 @@ export async function GET(req: NextRequest): Promise<Response> {
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
+  // Errors returned by Azure AD in the redirect query string.
+  const SILENT_SSO_ERRORS = new Set(["interaction_required", "login_required", "consent_required"]);
+
   if (error) {
     logger.warn(
       { error, desc: searchParams.get("error_description") },
       "auth: callback error from Microsoft",
     );
+
+    if (SILENT_SSO_ERRORS.has(error) && state) {
+      // Silent SSO failed — user has no active O365 session. Recover their intended
+      // destination from the PKCE state and send them to the sign-in page (no error
+      // message; the button is their next step).
+      const stateRaw = await getRedisClient().get(`auth:state:${state}`);
+      await getRedisClient().del(`auth:state:${state}`).catch(() => {});
+      const dest = stateRaw
+        ? ((JSON.parse(stateRaw) as { next?: string }).next ?? "/")
+        : "/";
+      const safeNext = dest.startsWith("/") ? dest : "/";
+      return NextResponse.redirect(
+        `${PUBLIC_BASE_URL}/sign-in?next=${encodeURIComponent(safeNext)}`
+      );
+    }
+
     return NextResponse.redirect(`${PUBLIC_BASE_URL}/sign-in?auth_error=${encodeURIComponent(error)}`);
   }
 

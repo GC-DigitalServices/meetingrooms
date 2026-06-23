@@ -12,8 +12,15 @@ export async function GET(req: Request): Promise<Response> {
   const { PUBLIC_BASE_URL } = getConfig();
   const redirectUri = `${PUBLIC_BASE_URL}/api/auth/callback`;
 
+  const { searchParams } = new URL(req.url);
+
   // Preserve the intended destination through the OAuth round-trip.
-  const next = new URL(req.url).searchParams.get("next") ?? "/";
+  const next = searchParams.get("next") ?? "/";
+
+  // prompt=none is set by the middleware for automatic silent SSO. Azure AD will
+  // return a code immediately if the user has an active O365 session, or return
+  // interaction_required which the callback converts to a normal /sign-in redirect.
+  const prompt = searchParams.get("prompt") === "none" ? "none" : undefined;
 
   const { verifier, challenge } = await getCryptoProvider().generatePkceCodes();
   const state = globalThis.crypto.randomUUID();
@@ -31,6 +38,8 @@ export async function GET(req: Request): Promise<Response> {
     codeChallenge: challenge,
     codeChallengeMethod: "S256",
     state,
+    domainHint: "greenhead.ac.uk",
+    ...(prompt && { prompt }),
   });
 
   return NextResponse.redirect(authUrl);
