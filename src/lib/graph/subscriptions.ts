@@ -74,22 +74,33 @@ export async function renewExpiringSubscriptions(): Promise<{ renewed: number; f
       if (isGone) {
         // Subscription no longer exists on Graph (expired while app was down).
         // Delete the stale DB record and recreate it.
-        logger.warn({ subscriptionId: sub.id }, "graph: subscription gone, recreating");
+        logger.warn({ subscriptionId: sub.id, roomId: sub.roomId }, "graph: subscription gone, recreating");
         try {
           await db.graphSubscription.delete({ where: { id: sub.id } });
           await createSubscriptionForRoom(sub.roomId);
-          logger.info({ subscriptionId: sub.id, roomId: sub.roomId }, "graph: subscription recreated");
+          logger.info({ roomId: sub.roomId }, "graph: subscription recreated");
           renewed++;
         } catch (recreateErr) {
-          logger.error({ subscriptionId: sub.id, roomId: sub.roomId, err: recreateErr }, "graph: failed to recreate subscription");
+          const recreateMsg = recreateErr instanceof Error ? recreateErr.message : String(recreateErr);
+          logger.error(
+            { subscriptionId: sub.id, roomId: sub.roomId, graphError: recreateMsg },
+            "graph: failed to recreate subscription"
+          );
           failed++;
         }
       } else {
-        logger.error({ subscriptionId: sub.id, err }, "graph: failed to renew subscription");
+        logger.error({ subscriptionId: sub.id, graphError: msg }, "graph: failed to renew subscription");
         failed++;
       }
     }
   }
+
+  // After renewal, ensure any rooms left without a subscription (e.g. after a
+  // failed recreation above) get one created. This is a no-op when everything
+  // succeeded — rooms that already have a subscription are skipped.
+  await ensureSubscriptionsForAllRooms().catch((err) =>
+    logger.error({ err }, "graph: ensureSubscriptionsForAllRooms failed post-renewal")
+  );
 
   return { renewed, failed };
 }
