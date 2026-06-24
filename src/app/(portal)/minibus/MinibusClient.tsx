@@ -84,6 +84,38 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
         <h1 className="font-display font-extrabold text-headline-xl text-on-background">Minibus Booking</h1>
       </div>
 
+      {/* ULEZ / Clean Air Zone notice */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined text-amber-600 mt-0.5 shrink-0">warning</span>
+          <div className="min-w-0">
+            <p className="font-semibold text-amber-900">ULEZ &amp; Clean Air Zone Charges</p>
+            <p className="mt-1 text-sm text-amber-800">
+              If your trip passes through a city with an active emission zone the minibus may be subject to a daily
+              charge. <strong>Please arrange payment of any applicable fees through Finance before your trip.</strong>
+            </p>
+            <details className="mt-3 group">
+              <summary className="cursor-pointer text-sm font-medium text-amber-800 hover:text-amber-900 list-none flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm transition-transform group-open:rotate-90">chevron_right</span>
+                Cities with active emission zones
+              </summary>
+              <ul className="mt-2 space-y-1 text-sm text-amber-800 list-disc list-inside marker:text-amber-500">
+                <li><strong>London</strong> — UK&apos;s largest ULEZ, covering all London boroughs and the City of London. Non-compliant petrol and diesel vehicles face a <strong>£12.50 daily fee</strong>.</li>
+                <li><strong>Birmingham</strong> — Class D CAZ within the A4540 Middleway ring road. Non-compliant cars face a <strong>£9 daily charge</strong>.</li>
+                <li><strong>Bristol</strong> — Class D CAZ charging non-compliant cars <strong>£9 per day</strong>.</li>
+                <li><strong>Bath</strong> — Class C CAZ. Private cars are exempt, but non-compliant vans and lorries face daily charges <strong>up to £100</strong>.</li>
+                <li><strong>Portsmouth</strong> — Class B CAZ targeting non-compliant buses, coaches, taxis, and HGVs.</li>
+                <li><strong>Sheffield</strong> — Class C CAZ charging <strong>£10/day</strong> for vans and <strong>£50/day</strong> for heavier vehicles.</li>
+                <li><strong>Tyneside (Newcastle &amp; Gateshead)</strong> — Class C CAZ charging non-compliant vans and taxis <strong>£12.50 daily</strong>, and HGVs/buses <strong>£50</strong>.</li>
+                <li><strong>Bradford</strong> — Class C CAZ. Private cars are exempt, but commercial vehicles face charges from <strong>£7 to £50</strong>.</li>
+                <li><strong>Oxford</strong> — Zero Emission Zone (ZEZ) in the city centre. All non-zero emission vehicles (excluding specific exemptions) are charged.</li>
+                <li><strong>Scotland (Aberdeen, Dundee, Edinburgh &amp; Glasgow)</strong> — All four cities operate strict LEZs. Non-compliant vehicles are barred entirely and entering one results in an <strong>immediate penalty charge</strong>.</li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </div>
+
       {/* Vehicle list */}
       {minibuses.length === 0 ? (
         <div className="rounded-xl border border-surface-container-highest bg-white p-8 text-center">
