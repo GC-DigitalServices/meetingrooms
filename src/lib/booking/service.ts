@@ -150,7 +150,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       const freeBay = room.sections.find((b) => !!b.mailboxUpn && !busyBayIds.has(b.id));
       if (!freeBay) throw new ConflictError("No car park bays available at this time");
       primaryMbox = freeBay.mailboxUpn!;
-      mailboxes = [primaryMbox];
+      mailboxes = []; // no resource attendees — event sits on bay calendar only
       bookingRoomId = freeBay.id;
     }
 

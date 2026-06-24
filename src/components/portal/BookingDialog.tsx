@@ -193,8 +193,8 @@ export default function BookingDialog({
             if (data.aborted) toast.warning("Some weeks could not be created — calendar system temporarily unavailable.");
           }
         } else {
-          const data = (await res.json()) as { error?: string };
-          errorMsg = data.error ?? "Booking failed. Please try again.";
+          const data = (await res.json()) as { error?: { message?: string } };
+          errorMsg = data.error?.message ?? "Booking failed. Please try again.";
         }
       } else {
         const res = await fetch("/api/bookings", {
@@ -212,8 +212,8 @@ export default function BookingDialog({
           ok = true;
           toast.success("Room booked successfully");
         } else {
-          const data = (await res.json()) as { error?: string };
-          errorMsg = data.error ?? "Booking failed. Please try again.";
+          const data = (await res.json()) as { error?: { message?: string } };
+          errorMsg = data.error?.message ?? "Booking failed. Please try again.";
         }
       }
 
