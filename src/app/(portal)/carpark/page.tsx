@@ -190,7 +190,7 @@ export default async function CarParkPage({
                         <span className="text-on-surface-variant whitespace-nowrap">
                           {fmtTime(b.startUtc)} – {fmtTime(b.endUtc)}
                         </span>
-                        <span className="text-on-surface">{b.subject || "Visitor Car Park"}</span>
+                        <span className="text-on-surface">{b.subject || b.organiserName || ""}</span>
                       </div>
                     ))}
                   </div>

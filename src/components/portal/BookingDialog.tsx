@@ -171,7 +171,7 @@ export default function BookingDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId,
-            subject: isParking ? "Visitor Parking" : subject.trim(),
+            subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
             end:   toUTC(selectedDate, endTime),
             repeatWeeks,
@@ -202,7 +202,7 @@ export default function BookingDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId,
-            subject: isParking ? "Visitor Parking" : subject.trim(),
+            subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
             end:   toUTC(selectedDate, endTime),
             premisesNotes: finalPremisesNotes,
@@ -304,7 +304,21 @@ export default function BookingDialog({
             </p>
           )}
 
-          {!isParking && (
+          {isParking ? (
+            <div>
+              <Label htmlFor="bd-subject">Notes (optional)</Label>
+              <Input
+                id="bd-subject"
+                className="mt-1"
+                placeholder="e.g. visitor name or purpose of visit"
+                maxLength={100}
+                value={subject}
+                disabled={submitting}
+                onChange={(e) => setSubject(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              />
+            </div>
+          ) : (
             <div>
               <Label htmlFor="bd-subject">
                 Subject <span className="text-destructive">*</span>
