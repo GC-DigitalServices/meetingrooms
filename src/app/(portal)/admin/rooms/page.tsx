@@ -28,6 +28,7 @@ interface Room {
   kind: string;
   bookable: boolean;
   mailboxUpn: string | null;
+  parentRoomId: string | null;
   allowedGroups: string[];
 }
 
@@ -41,9 +42,10 @@ interface FormState {
   building: string;
   floor: string;
   capacity: string;
-  kind: "STANDARD" | "MINIBUS";
+  kind: "STANDARD" | "MINIBUS" | "PARKING" | "PARKING_BAY";
   mailboxUpn: string;
   bookable: boolean;
+  parentRoomId: string;
   checkedGroupIds: string[];
   extraGroupIds: string;
 }
@@ -53,13 +55,15 @@ interface FormState {
 // ---------------------------------------------------------------------------
 
 const KIND_LABEL: Record<string, string> = {
-  STANDARD: "Standard",
-  COMPOSITE: "Composite",
-  SECTION: "Section",
-  MINIBUS: "Minibus",
+  STANDARD:    "Standard",
+  COMPOSITE:   "Composite",
+  SECTION:     "Section",
+  MINIBUS:     "Minibus",
+  PARKING:     "Car Park Pool",
+  PARKING_BAY: "Car Park Bay",
 };
 
-const EDITABLE_KINDS = new Set(["STANDARD", "MINIBUS"]);
+const EDITABLE_KINDS = new Set(["STANDARD", "MINIBUS", "PARKING", "PARKING_BAY"]);
 
 function blankForm(): FormState {
   return {
@@ -70,6 +74,7 @@ function blankForm(): FormState {
     kind:           "STANDARD",
     mailboxUpn:     "",
     bookable:       true,
+    parentRoomId:   "",
     checkedGroupIds: [],
     extraGroupIds:  "",
   };
@@ -84,9 +89,10 @@ function roomToForm(room: Room, knownGroups: KnownGroup[]): FormState {
     building:       room.building ?? "",
     floor:          room.floor ?? "",
     capacity:       String(room.capacity),
-    kind:           room.kind as "STANDARD" | "MINIBUS",
+    kind:           room.kind as FormState["kind"],
     mailboxUpn:     room.mailboxUpn ?? "",
     bookable:       room.bookable,
+    parentRoomId:   room.parentRoomId ?? "",
     checkedGroupIds,
     extraGroupIds,
   };
@@ -109,12 +115,14 @@ function RoomFormDialog({
   onClose,
   editRoom,
   knownGroups,
+  parkingPools,
   onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   editRoom: Room | null;
   knownGroups: KnownGroup[];
+  parkingPools: Room[];
   onSaved: () => void;
 }) {
   const [form, setForm] = useState<FormState>(blankForm);
@@ -160,6 +168,7 @@ function RoomFormDialog({
       bookable:      form.bookable,
       allowedGroups: buildAllowedGroups(form),
       ...(!isEdit && { kind: form.kind }),
+      ...(form.kind === "PARKING_BAY" && { parentRoomId: form.parentRoomId || null }),
     };
 
     const url    = isEdit ? `/api/admin/rooms/${editRoom!.id}` : "/api/admin/rooms";
@@ -250,10 +259,30 @@ function RoomFormDialog({
                 id="rf-kind"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={form.kind}
-                onChange={(e) => setField("kind", e.target.value as "STANDARD" | "MINIBUS")}
+                onChange={(e) => setField("kind", e.target.value as FormState["kind"])}
               >
                 <option value="STANDARD">Standard room</option>
                 <option value="MINIBUS">Minibus</option>
+                <option value="PARKING">Car Park Pool</option>
+                <option value="PARKING_BAY">Car Park Bay</option>
+              </select>
+            </div>
+          )}
+
+          {/* Parent pool — PARKING_BAY only */}
+          {form.kind === "PARKING_BAY" && (
+            <div className="space-y-1">
+              <Label htmlFor="rf-parent">Car Park Pool</Label>
+              <select
+                id="rf-parent"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.parentRoomId}
+                onChange={(e) => setField("parentRoomId", e.target.value)}
+              >
+                <option value="">— select pool —</option>
+                {parkingPools.map((p) => (
+                  <option key={p.id} value={p.id}>{p.displayName}</option>
+                ))}
               </select>
             </div>
           )}
@@ -448,6 +477,7 @@ export default function AdminRoomsPage() {
         onClose={() => setDialogOpen(false)}
         editRoom={editRoom}
         knownGroups={knownGroups}
+        parkingPools={(rooms ?? []).filter((r) => r.kind === "PARKING")}
         onSaved={load}
       />
     </div>

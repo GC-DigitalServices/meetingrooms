@@ -17,7 +17,8 @@ const RoomSchema = z.object({
   capacity:      z.number().int().min(1),
   equipment:     z.array(z.string()).default([]),
   bookable:      z.boolean().default(true),
-  kind:          z.enum(["STANDARD", "MINIBUS"]),
+  kind:          z.enum(["STANDARD", "MINIBUS", "PARKING", "PARKING_BAY"]),
+  parentRoomId:  z.string().uuid().nullable().optional(),
   allowedGroups: z.array(z.string()).default([]),
 });
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const parsed = RoomSchema.safeParse(body);
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Validation failed", { details: parsed.error.flatten() });
 
-  const { displayName, mailboxUpn, building, floor, capacity, equipment, bookable, kind, allowedGroups } = parsed.data;
+  const { displayName, mailboxUpn, building, floor, capacity, equipment, bookable, kind, parentRoomId, allowedGroups } = parsed.data;
 
   const room = await db.room.create({
     data: {
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       equipment,
       bookable,
       kind,
+      parentRoomId:  parentRoomId ?? null,
       allowedGroups,
     },
   });
