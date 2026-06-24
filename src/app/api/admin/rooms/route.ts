@@ -18,7 +18,7 @@ const RoomSchema = z.object({
   equipment:     z.array(z.string()).default([]),
   bookable:      z.boolean().default(true),
   kind:          z.enum(["STANDARD", "MINIBUS", "PARKING", "PARKING_BAY"]),
-  parentRoomId:  z.string().uuid().nullable().optional(),
+  parentRoomId:  z.string().min(1).nullable().optional(),
   allowedGroups: z.array(z.string()).default([]),
 });
 
