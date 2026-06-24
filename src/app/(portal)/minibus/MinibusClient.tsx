@@ -17,6 +17,8 @@ interface StatusBooking {
   roomId: string;
   startUtc: string;
   endUtc: string;
+  subject: string | null;
+  organiserName: string | null;
 }
 
 interface MyBooking {
@@ -31,10 +33,12 @@ interface MyBooking {
 interface Props {
   minibuses: Minibus[];
   statusBookings: StatusBooking[];
+  dayBookings: StatusBooking[];
   minibusIds: string[];
+  isToday: boolean;
 }
 
-export default function MinibusClient({ minibuses, statusBookings, minibusIds }: Props) {
+export default function MinibusClient({ minibuses, statusBookings, dayBookings, minibusIds, isToday }: Props) {
   const [bookingTarget, setBookingTarget] = useState<Minibus | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string } | null>(null);
   const [myBookings, setMyBookings] = useState<MyBooking[] | null>(null);
@@ -66,6 +70,10 @@ export default function MinibusClient({ minibuses, statusBookings, minibusIds }:
     );
   }
 
+  function vehicleDayBookings(minibusId: string): StatusBooking[] {
+    return dayBookings.filter((b) => b.roomId === minibusId);
+  }
+
   const upcoming = (myBookings ?? [])
     .filter((b) => isAfter(new Date(b.endUtc), now))
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
@@ -85,53 +93,81 @@ export default function MinibusClient({ minibuses, statusBookings, minibusIds }:
       ) : (
         <div className="space-y-3">
           {minibuses.map((m) => {
-            const busy = busyNow(m.id);
-            const next = nextStatusBooking(m.id);
+            const busy = isToday && busyNow(m.id);
+            const next = isToday ? nextStatusBooking(m.id) : null;
+            const scheduleBookings = vehicleDayBookings(m.id);
+
             return (
               <div
                 key={m.id}
-                className="flex items-center justify-between gap-4 rounded-xl border border-surface-container-highest bg-white p-4 shadow-card"
+                className="rounded-xl border border-surface-container-highest bg-white shadow-card overflow-hidden"
               >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      busy ? "bg-[var(--status-busy)]/10" : "bg-[var(--status-free)]/10"
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-2xl ${
-                        busy ? "text-[var(--status-busy)]" : "text-[var(--status-free)]"
+                <div className="flex items-center justify-between gap-4 p-4">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        busy ? "bg-[var(--status-busy)]/10" : "bg-[var(--status-free)]/10"
                       }`}
                     >
-                      directions_bus
-                    </span>
+                      <span
+                        className={`material-symbols-outlined text-2xl ${
+                          busy ? "text-[var(--status-busy)]" : "text-[var(--status-free)]"
+                        }`}
+                      >
+                        directions_bus
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-on-background">{m.displayName}</p>
+                      <p className="text-label-sm font-label-sm text-on-surface-variant mt-0.5">
+                        {isToday
+                          ? busy
+                            ? "Currently out"
+                            : next
+                            ? `Available until ${localTime(next.startUtc)}`
+                            : "Available"
+                          : null}
+                        {isToday && " · "}
+                        {m.capacity} seats
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-on-background">{m.displayName}</p>
-                    <p className="text-label-sm font-label-sm text-on-surface-variant mt-0.5">
-                      {busy
-                        ? "Currently out"
-                        : next
-                        ? `Available until ${localTime(next.startUtc)}`
-                        : "Available"}
-                      {" · "}
-                      {m.capacity} seats
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => setBookingTarget(m)}
+                    className="shrink-0 rounded-xl bg-primary px-4 py-2 text-label-md font-label-md text-on-primary hover:bg-primary/90 transition-colors"
+                  >
+                    Book
+                  </button>
                 </div>
-                <button
-                  onClick={() => setBookingTarget(m)}
-                  className="shrink-0 rounded-xl bg-primary px-4 py-2 text-label-md font-label-md text-on-primary hover:bg-primary/90 transition-colors"
-                >
-                  Book
-                </button>
+
+                {/* Day schedule */}
+                {scheduleBookings.length > 0 ? (
+                  <div className="border-t border-surface-container-highest px-4 pb-3 pt-2 space-y-1">
+                    {scheduleBookings.map((b) => (
+                      <div key={b.id} className="flex items-center gap-3 text-sm">
+                        <span className="material-symbols-outlined text-sm text-on-surface-variant">schedule</span>
+                        <span className="text-on-surface-variant whitespace-nowrap">
+                          {localTime(b.startUtc)}–{localTime(b.endUtc)}
+                        </span>
+                        <span className="text-on-surface truncate">
+                          {b.subject || "Minibus booking"}
+                          {b.organiserName ? ` · ${b.organiserName}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-t border-surface-container-highest px-4 pb-3 pt-2">
+                    <p className="text-sm text-on-surface-variant">No bookings</p>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Upcoming trips */}
+      {/* Upcoming trips — always shows the user's future bookings */}
       {upcoming.length > 0 && (
         <div>
           <h2 className="font-display font-semibold text-headline-md mb-3">Your upcoming trips</h2>
