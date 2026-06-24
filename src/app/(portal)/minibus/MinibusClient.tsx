@@ -100,16 +100,16 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
                 Cities with active emission zones
               </summary>
               <ul className="mt-2 space-y-1 text-sm text-amber-800 list-disc list-inside marker:text-amber-500">
-                <li><strong>London</strong> — UK&apos;s largest ULEZ, covering all London boroughs and the City of London. Non-compliant petrol and diesel vehicles face a <strong>£12.50 daily fee</strong>.</li>
-                <li><strong>Birmingham</strong> — Class D CAZ within the A4540 Middleway ring road. Non-compliant cars face a <strong>£9 daily charge</strong>.</li>
-                <li><strong>Bristol</strong> — Class D CAZ charging non-compliant cars <strong>£9 per day</strong>.</li>
-                <li><strong>Bath</strong> — Class C CAZ. Private cars are exempt, but non-compliant vans and lorries face daily charges <strong>up to £100</strong>.</li>
-                <li><strong>Portsmouth</strong> — Class B CAZ targeting non-compliant buses, coaches, taxis, and HGVs.</li>
-                <li><strong>Sheffield</strong> — Class C CAZ charging <strong>£10/day</strong> for vans and <strong>£50/day</strong> for heavier vehicles.</li>
-                <li><strong>Tyneside (Newcastle &amp; Gateshead)</strong> — Class C CAZ charging non-compliant vans and taxis <strong>£12.50 daily</strong>, and HGVs/buses <strong>£50</strong>.</li>
-                <li><strong>Bradford</strong> — Class C CAZ. Private cars are exempt, but commercial vehicles face charges from <strong>£7 to £50</strong>.</li>
-                <li><strong>Oxford</strong> — Zero Emission Zone (ZEZ) in the city centre. All non-zero emission vehicles (excluding specific exemptions) are charged.</li>
-                <li><strong>Scotland (Aberdeen, Dundee, Edinburgh &amp; Glasgow)</strong> — All four cities operate strict LEZs. Non-compliant vehicles are barred entirely and entering one results in an <strong>immediate penalty charge</strong>.</li>
+                <li><strong>London</strong> — <strong>£12.50/day</strong></li>
+                <li><strong>Birmingham</strong> — <strong>£9/day</strong></li>
+                <li><strong>Bristol</strong> — <strong>£9/day</strong></li>
+                <li><strong>Bath</strong> — <strong>up to £100/day</strong></li>
+                <li><strong>Portsmouth</strong> — charge applies to non-compliant larger vehicles</li>
+                <li><strong>Sheffield</strong> — <strong>£10–£50/day</strong></li>
+                <li><strong>Tyneside (Newcastle &amp; Gateshead)</strong> — <strong>£12.50/day</strong></li>
+                <li><strong>Bradford</strong> — <strong>£7–£50/day</strong></li>
+                <li><strong>Oxford</strong> — charge applies in the city centre Zero Emission Zone</li>
+                <li><strong>Scotland (Aberdeen, Dundee, Edinburgh &amp; Glasgow)</strong> — non-compliant vehicles are <strong>barred</strong> and face an immediate penalty charge</li>
               </ul>
             </details>
           </div>
