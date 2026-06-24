@@ -32,7 +32,7 @@ export default function BottomNav() {
           <span className={cn("material-symbols-outlined text-xl", isActive(href) && "filled")}>
             {icon}
           </span>
-          <span className="text-label-sm font-label-sm">{label}</span>
+          <span className="hidden min-[400px]:block text-label-sm font-label-sm">{label}</span>
         </Link>
       ))}
     </nav>

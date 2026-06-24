@@ -14,7 +14,7 @@ export default function Header({ session }: Props) {
         <span className="bg-on-primary text-primary px-2 py-0.5 rounded-lg text-lg font-extrabold leading-none">
           gc
         </span>
-        <span className="font-semibold text-base text-on-primary/90">Greenhead College</span>
+        <span className="hidden sm:block font-semibold text-base text-on-primary/90">Greenhead College</span>
       </div>
 
       {/* Desktop nav */}

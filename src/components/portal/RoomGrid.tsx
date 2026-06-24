@@ -102,6 +102,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const [onlyFree, setOnlyFree] = useState(isStaff || isAdmin);
   const [minCapacity, setMinCapacity] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [avail, setAvail] = useState<Record<string, RoomAvailability>>({});
 
@@ -195,12 +196,25 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
     : new Date(filterDate + "T12:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden">
-      {/* ── Left filter sidebar ─────────────────────────────────── */}
-      <aside className="w-80 flex-shrink-0 border-r border-outline-variant/30 bg-surface-container-low flex flex-col overflow-hidden">
-        {/* Filter content */}
+    <div className="lg:flex lg:h-[calc(100vh-80px)] lg:overflow-hidden">
+      {/* ── Filter sidebar ─────────────────────────────────────── */}
+      <aside className="bg-surface-container-low border-b lg:border-b-0 lg:border-r border-outline-variant/30 lg:w-80 lg:flex-shrink-0 lg:flex lg:flex-col lg:overflow-hidden">
+        {/* Mobile toggle button */}
+        <button
+          className="lg:hidden w-full flex items-center justify-between px-4 py-3"
+          onClick={() => setFiltersOpen(v => !v)}
+          aria-expanded={filtersOpen}
+        >
+          <span className="font-semibold text-sm text-on-surface">Search Filters</span>
+          <span className="material-symbols-outlined text-on-surface-variant text-base">
+            {filtersOpen ? "expand_less" : "tune"}
+          </span>
+        </button>
+
+        {/* Filter content — always visible on desktop, toggle on mobile */}
+        <div className={`${filtersOpen ? "block" : "hidden"} lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden`}>
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
-          <h2 className="font-bold text-base text-on-background">Search Filters</h2>
+          <h2 className="font-bold text-base text-on-background hidden lg:block">Search Filters</h2>
           {/* Date */}
           <div>
             <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Date</label>
@@ -289,17 +303,18 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
         {/* Apply button */}
         <div className="p-4 border-t border-outline-variant/30">
           <button
-            onClick={() => void fetchAvailability()}
+            onClick={() => { void fetchAvailability(); setFiltersOpen(false); }}
             className="w-full bg-primary text-on-primary py-2.5 rounded font-semibold text-sm hover:bg-primary-container transition-colors"
           >
             Apply Filters
           </button>
         </div>
+        </div>{/* end toggle wrapper */}
       </aside>
 
       {/* ── Main content ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="px-margin-desktop pt-lg pb-24 sm:pb-lg">
+      <div className="flex-1 lg:overflow-y-auto custom-scrollbar">
+        <div className="px-4 md:px-margin-desktop pt-lg pb-24 lg:pb-lg">
           <h1 className="font-extrabold text-headline-xl text-on-background mb-lg">Meeting Room Finder</h1>
           {/* Result header */}
           <div className="flex justify-between items-end mb-md">
@@ -320,7 +335,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
               <p className="text-on-surface-variant">No meeting rooms match your filters.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-gutter">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter">
               {filtered.map(room => {
                 const bk = bookingsMap[room.id] ?? [];
                 const status = computeRoomStatus(bk, now);
