@@ -44,7 +44,7 @@ export function bookingLockKey(
   kind: string,
   parentRoomId: string | null
 ): string {
-  if (kind === "SECTION" && parentRoomId) {
+  if ((kind === "SECTION" || kind === "PARKING_BAY") && parentRoomId) {
     return `lock:room:${parentRoomId}`;
   }
   return `lock:room:${roomId}`;

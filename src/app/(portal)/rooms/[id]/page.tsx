@@ -40,8 +40,15 @@ export default async function RoomDetailPage({
   todayStart.setHours(0, 0, 0, 0);
   const until7d = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+  // For PARKING pools, load bookings across all bay IDs
+  const bookingRoomIds =
+    room.kind === "PARKING"
+      ? room.sections.map((s) => s.id)
+      : [id];
+  const totalBays = room.kind === "PARKING" ? room.sections.length : 0;
+
   const rawBookings = await db.booking.findMany({
-    where: { roomId: id, startUtc: { lt: until7d }, endUtc: { gt: todayStart } },
+    where: { roomId: { in: bookingRoomIds }, startUtc: { lt: until7d }, endUtc: { gt: todayStart } },
     orderBy: { startUtc: "asc" },
   });
 
@@ -65,6 +72,59 @@ export default async function RoomDetailPage({
       organiserUpn: b.organiserUpn, organiserName: b.organiserName, source: b.source,
     };
   });
+
+  if (room.kind === "PARKING") {
+    const nowMs = now.getTime();
+    const bookedNow = rawBookings.filter(
+      (b) => new Date(b.startUtc).getTime() <= nowMs && new Date(b.endUtc).getTime() > nowMs
+    ).length;
+    const freeNow = totalBays - bookedNow;
+    const fmtLondon = (d: Date) =>
+      new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" }).format(d);
+    const toLocalDate = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+    const todayStr = toLocalDate(now);
+    const todayBookings = rawBookings.filter((b) => toLocalDate(new Date(b.startUtc)) === todayStr);
+
+    return (
+      <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
+        <div className="max-w-2xl">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold tracking-tight">{room.displayName}</h1>
+            <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">local_parking</span>
+                {totalBays} bays
+              </span>
+              <span className={`font-medium ${freeNow > 0 ? "text-green-700" : "text-red-600"}`}>
+                {freeNow} available now
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
+              Today&apos;s bookings
+            </h2>
+            {todayBookings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No bookings today — all {totalBays} bays free.</p>
+            ) : (
+              <div className="space-y-2">
+                {todayBookings.map((b) => (
+                  <div key={b.id} className="flex items-center gap-4 text-sm border rounded px-3 py-2">
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {fmtLondon(new Date(b.startUtc))} – {fmtLondon(new Date(b.endUtc))}
+                    </span>
+                    <span>Visitor Car Park</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">

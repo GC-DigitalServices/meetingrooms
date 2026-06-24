@@ -22,6 +22,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   });
 
   const visible = rooms.filter((r) =>
+    r.kind !== "PARKING_BAY" &&
     canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, showAll)
   );
 

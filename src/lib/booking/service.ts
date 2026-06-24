@@ -71,6 +71,17 @@ async function familyRoomIds(room: RoomWithSections): Promise<string[]> {
   if (room.kind === "COMPOSITE") {
     return [room.id, ...room.sections.map((s) => s.id)];
   }
+  if (room.kind === "PARKING") {
+    // Conflict check across all bay IDs (pool itself has no bookings)
+    return room.sections.map((s) => s.id);
+  }
+  if (room.kind === "PARKING_BAY" && room.parentRoomId) {
+    const siblings = await db.room.findMany({
+      where: { parentRoomId: room.parentRoomId },
+      select: { id: true },
+    });
+    return siblings.map((s) => s.id);
+  }
   if (room.kind === "SECTION" && room.parentRoomId) {
     const siblings = await db.room.findMany({
       where: { parentRoomId: room.parentRoomId },
@@ -108,10 +119,18 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     throw new Error("Minibus bookings require premisesNotes (destination, passengers, driver)");
   }
 
-  const mailboxes    = resolveBookingMailboxes(room, room.sections);
-  const primaryMbox  = mailboxes[0];
-  const lockKey      = bookingLockKey(room.id, room.kind, room.parentRoomId);
-  const roomIds      = await familyRoomIds(room);
+  const isParking = room.kind === "PARKING";
+  let mailboxes: string[] = [];
+  let primaryMbox = "";
+  let bookingRoomId = input.roomId;
+
+  if (!isParking) {
+    mailboxes = resolveBookingMailboxes(room, room.sections);
+    primaryMbox = mailboxes[0];
+  }
+
+  const lockKey = bookingLockKey(room.id, room.kind, room.parentRoomId);
+  const roomIds = await familyRoomIds(room);
 
   // Fail fast before acquiring the lock if Graph is known degraded
   if (await isGraphDegraded()) throw new GraphUnavailableError();
@@ -123,6 +142,16 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     });
     const conflict = findConflict({ startUtc: start, endUtc: end }, existing);
     if (conflict) throw new ConflictError(`Conflicts with: ${conflict.subject}`);
+
+    // PARKING: pick a free bay inside the lock
+    if (isParking) {
+      const busyBayIds = new Set(existing.map((c) => c.roomId));
+      const freeBay = room.sections.find((b) => !!b.mailboxUpn && !busyBayIds.has(b.id));
+      if (!freeBay) throw new ConflictError("No car park bays available at this time");
+      primaryMbox = freeBay.mailboxUpn!;
+      mailboxes = [primaryMbox];
+      bookingRoomId = freeBay.id;
+    }
 
     // 4. Graph write
     let graphEvent;
@@ -153,7 +182,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       data: {
         graphEventId:      graphEvent.id,
         graphICalUid:      graphEvent.iCalUId,
-        roomId:            input.roomId,
+        roomId:            bookingRoomId,
         organiserUpn:      input.organiserUpn,
         organiserName:     input.organiserName,
         subject:           input.subject,
@@ -210,7 +239,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   });
 
   // 9. Socket.IO broadcast (outside the lock — non-blocking, fire-and-forget)
-  publishBookingCreated(booking, room.parentRoomId).catch((err) =>
+  const broadcastParentId = isParking ? room.id : room.parentRoomId;
+  publishBookingCreated(booking, broadcastParentId).catch((err) =>
     logger.warn({ err, bookingId: booking.id }, "ws: booking.created broadcast failed")
   );
 

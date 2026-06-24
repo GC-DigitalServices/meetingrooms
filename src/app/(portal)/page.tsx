@@ -15,11 +15,15 @@ export default async function PortalPage() {
 
   const allRooms = await db.room.findMany({
     orderBy: [{ building: "asc" }, { displayName: "asc" }],
+    include: {
+      sections: { where: { kind: "PARKING_BAY" }, select: { id: true } },
+    },
   });
 
   // What the user can see (showAll=true so non-staff still get all rooms when they toggle)
   const visibleRooms = allRooms.filter((r) =>
     r.kind !== "MINIBUS" &&
+    r.kind !== "PARKING_BAY" &&
     canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, true)
   );
 
@@ -35,9 +39,14 @@ export default async function PortalPage() {
     })
     .map((r) => r.id);
 
+  // Include parking bay IDs in the bookings load so PARKING cards can show availability
+  const bayIds = visibleRooms
+    .filter((r) => r.kind === "PARKING")
+    .flatMap((r) => r.sections.map((s) => s.id));
+
   const rawBookings = await db.booking.findMany({
     where: {
-      roomId: { in: visibleRooms.map((r) => r.id) },
+      roomId: { in: [...visibleRooms.map((r) => r.id), ...bayIds] },
       startUtc: { lt: until },
       endUtc: { gt: now },
     },
@@ -65,6 +74,7 @@ export default async function PortalPage() {
         equipment: r.equipment,
         kind: r.kind,
         bookable: r.bookable,
+        bayIds: r.kind === "PARKING" ? r.sections.map((s) => s.id) : undefined,
       }))}
       initialBookings={initialBookings}
       isStaff={session.isStaff}

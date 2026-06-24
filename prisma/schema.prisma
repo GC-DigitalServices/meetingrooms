@@ -16,6 +16,8 @@ enum RoomKind {
   COMPOSITE
   SECTION
   MINIBUS
+  PARKING
+  PARKING_BAY
 }
 
 enum BookingSource {

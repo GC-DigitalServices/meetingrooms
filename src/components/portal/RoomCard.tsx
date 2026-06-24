@@ -24,6 +24,7 @@ interface Room {
   capacity: number;
   equipment: string[];
   kind: string;
+  bayIds?: string[];
 }
 
 interface Props {
@@ -36,6 +37,7 @@ interface Props {
   filterEnd?: string;
   isFavourite?: boolean;
   onToggleFavourite?: () => void;
+  freeBayCount?: number;
 }
 
 const EQUIP_ICON: Record<string, string> = {
@@ -53,6 +55,10 @@ const BUILDING_ICON: Record<string, string> = {
   Rostron: "calculate",
 };
 
+const KIND_ICON: Record<string, string> = {
+  PARKING: "local_parking",
+};
+
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   free: { label: "Available", className: "bg-green-100 text-green-800" },
   busy: { label: "Busy", className: "bg-red-100 text-red-700" },
@@ -62,7 +68,7 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
 export default function RoomCard({
   room, bookings, canBook, nextLabel,
   filterDate, filterStart, filterEnd,
-  isFavourite, onToggleFavourite,
+  isFavourite, onToggleFavourite, freeBayCount,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
@@ -74,8 +80,12 @@ export default function RoomCard({
     .filter(b => toLocalDate(b.startUtc) === scheduleDate)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
-  const buildingIcon = (room.building && BUILDING_ICON[room.building]) ?? "meeting_room";
-  const bookLabel = filterStart && filterEnd ? `Book ${filterStart} – ${filterEnd}` : "Book Room";
+  const buildingIcon = KIND_ICON[room.kind] ?? (room.building && BUILDING_ICON[room.building]) ?? "meeting_room";
+  const bookLabel = room.kind === "PARKING"
+    ? "Book a Bay"
+    : filterStart && filterEnd
+    ? `Book ${filterStart} – ${filterEnd}`
+    : "Book Room";
 
   return (
     <>
@@ -99,9 +109,15 @@ export default function RoomCard({
           </div>
           {/* Status badge — top right */}
           <div className="absolute top-3 right-3">
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.className}`}>
-              {badge.label}
-            </span>
+            {room.kind === "PARKING" && freeBayCount !== undefined ? (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${freeBayCount > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-700"}`}>
+                {freeBayCount} / {room.bayIds?.length ?? 9} free
+              </span>
+            ) : (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.className}`}>
+                {badge.label}
+              </span>
+            )}
           </div>
           {/* Favourite — top left */}
           {onToggleFavourite && (
@@ -135,8 +151,12 @@ export default function RoomCard({
 
           <div className="flex flex-wrap gap-4 mb-4 text-on-surface-variant">
             <div className="flex items-center gap-1 text-sm">
-              <span className="material-symbols-outlined text-base">groups</span>
-              {room.capacity} {room.capacity === 1 ? "person" : "people"}
+              <span className="material-symbols-outlined text-base">
+                {room.kind === "PARKING" ? "local_parking" : "groups"}
+              </span>
+              {room.kind === "PARKING"
+                ? `${room.bayIds?.length ?? room.capacity} bays`
+                : `${room.capacity} ${room.capacity === 1 ? "person" : "people"}`}
             </div>
             {room.equipment.slice(0, 2).map(e => (
               <div key={e} className="flex items-center gap-1 text-sm capitalize">

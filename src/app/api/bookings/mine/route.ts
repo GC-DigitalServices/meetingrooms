@@ -17,8 +17,27 @@ export async function GET(req: NextRequest): Promise<Response> {
   const bookings = await db.booking.findMany({
     where: { organiserUpn: session.upn },
     orderBy: { startUtc: "asc" },
-    include: { room: { select: { id: true, displayName: true, building: true, kind: true } } },
+    include: {
+      room: {
+        select: {
+          id: true,
+          displayName: true,
+          building: true,
+          kind: true,
+          parent: { select: { id: true, displayName: true } },
+        },
+      },
+    },
   });
 
-  return NextResponse.json(bookings);
+  // For PARKING_BAY bookings, surface the pool's display name and ID
+  return NextResponse.json(
+    bookings.map((b) => ({
+      ...b,
+      room:
+        b.room.kind === "PARKING_BAY" && b.room.parent
+          ? { id: b.room.parent.id, displayName: b.room.parent.displayName, building: null }
+          : { id: b.room.id, displayName: b.room.displayName, building: b.room.building },
+    }))
+  );
 }

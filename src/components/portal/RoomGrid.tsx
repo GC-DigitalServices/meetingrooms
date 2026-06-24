@@ -17,6 +17,7 @@ interface Room {
   equipment: string[];
   kind: string;
   bookable: boolean;
+  bayIds?: string[];
 }
 
 interface Props {
@@ -328,6 +329,13 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
                   : status === "soon" ? bookedAtLabel(bk, now)
                   : freeUntilLabel(bk, now);
 
+                const freeBayCount = room.kind === "PARKING" && room.bayIds
+                  ? room.bayIds.filter(bayId => {
+                      const bayBk = bookingsMap[bayId] ?? [];
+                      return !bayBk.some(b => new Date(b.startUtc) <= now && new Date(b.endUtc) > now);
+                    }).length
+                  : undefined;
+
                 return (
                   <RoomCard
                     key={room.id}
@@ -340,6 +348,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
                     filterEnd={filterTo}
                     isFavourite={favourites.has(room.id)}
                     onToggleFavourite={() => toggleFavourite(room.id)}
+                    freeBayCount={freeBayCount}
                   />
                 );
               })}
