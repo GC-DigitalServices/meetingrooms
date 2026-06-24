@@ -372,7 +372,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
           {/* Footer */}
           <footer className="mt-16 pt-8 border-t border-outline-variant/30 text-center text-xs text-on-surface-variant">
-            <p>© {new Date().getFullYear()} Greenhead College · Room Booking Platform</p>
+            <p>Meeting Rooms V1.0 · Greenhead College</p>
           </footer>
         </div>
       </div>
