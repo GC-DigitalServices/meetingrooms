@@ -85,6 +85,7 @@ export default function BookingDialog({
   const [repeatWeeks, setRepeatWeeks] = useState(4);
 
   const isMinibus = roomKind === "MINIBUS";
+  const isParking = roomKind === "PARKING" || roomKind === "PARKING_BAY";
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function BookingDialog({
   }, [startTime, endTime]);
 
   async function handleSubmit() {
-    if (!subject.trim()) {
+    if (!isParking && !subject.trim()) {
       setError("Subject is required.");
       return;
     }
@@ -170,7 +171,7 @@ export default function BookingDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId,
-            subject: subject.trim(),
+            subject: isParking ? "Visitor Parking" : subject.trim(),
             start: toUTC(selectedDate, startTime),
             end:   toUTC(selectedDate, endTime),
             repeatWeeks,
@@ -201,7 +202,7 @@ export default function BookingDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId,
-            subject: subject.trim(),
+            subject: isParking ? "Visitor Parking" : subject.trim(),
             start: toUTC(selectedDate, startTime),
             end:   toUTC(selectedDate, endTime),
             premisesNotes: finalPremisesNotes,
@@ -303,21 +304,23 @@ export default function BookingDialog({
             </p>
           )}
 
-          <div>
-            <Label htmlFor="bd-subject">
-              Subject <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="bd-subject"
-              className="mt-1"
-              placeholder="e.g. Year 10 Physics"
-              maxLength={100}
-              value={subject}
-              disabled={submitting}
-              onChange={(e) => setSubject(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            />
-          </div>
+          {!isParking && (
+            <div>
+              <Label htmlFor="bd-subject">
+                Subject <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="bd-subject"
+                className="mt-1"
+                placeholder="e.g. Year 10 Physics"
+                maxLength={100}
+                value={subject}
+                disabled={submitting}
+                onChange={(e) => setSubject(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              />
+            </div>
+          )}
 
           {isMinibus && (
             <div>
@@ -342,8 +345,8 @@ export default function BookingDialog({
             </div>
           )}
 
-          {/* Premises assistance — shown for all non-minibus rooms */}
-          {!isMinibus && (
+          {/* Premises assistance — shown for standard rooms only */}
+          {!isMinibus && !isParking && (
             <div>
               <button
                 type="button"
@@ -381,8 +384,8 @@ export default function BookingDialog({
             </div>
           )}
 
-          {/* Repeat weekly — only for non-minibus rooms */}
-          {!isMinibus && (
+          {/* Repeat weekly — only for standard rooms */}
+          {!isMinibus && !isParking && (
             <div>
               <button
                 type="button"
@@ -433,8 +436,8 @@ export default function BookingDialog({
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !subject.trim()}>
-            {submitting ? "Booking…" : "Book meeting room"}
+          <Button onClick={handleSubmit} disabled={submitting || (!isParking && !subject.trim())}>
+            {submitting ? "Booking…" : isParking ? "Book a bay" : "Book meeting room"}
           </Button>
         </DialogFooter>
       </DialogContent>
