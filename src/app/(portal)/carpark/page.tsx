@@ -33,7 +33,7 @@ export default async function CarParkPage() {
     return (
       <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
         <h1 className="font-extrabold text-headline-xl text-on-background mb-4">Visitor Car Park</h1>
-        <p className="text-on-surface-variant">No car park has been set up yet. Ask IT to configure the car park bays.</p>
+        <p className="text-on-surface-variant">No car park has been set up yet.</p>
       </div>
     );
   }

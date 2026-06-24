@@ -15,7 +15,7 @@ export function NavLinks({ isAdmin, isStaff }: Props) {
     { href: "/", label: "Meeting Rooms" },
     { href: "/bookings", label: "My Bookings" },
     { href: "/minibus", label: "Minibus" },
-    ...((isStaff || isAdmin) ? [{ href: "/carpark", label: "Car Park" }] : []),
+    ...((isStaff || isAdmin) ? [{ href: "/carpark", label: "Visitor Car Park" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
