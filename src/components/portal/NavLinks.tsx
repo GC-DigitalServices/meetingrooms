@@ -5,15 +5,17 @@ import { usePathname } from "next/navigation";
 
 interface Props {
   isAdmin: boolean;
+  isStaff: boolean;
 }
 
-export function NavLinks({ isAdmin }: Props) {
+export function NavLinks({ isAdmin, isStaff }: Props) {
   const pathname = usePathname();
 
   const links = [
     { href: "/", label: "Meeting Rooms" },
     { href: "/bookings", label: "My Bookings" },
     { href: "/minibus", label: "Minibus" },
+    ...((isStaff || isAdmin) ? [{ href: "/carpark", label: "Car Park" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 

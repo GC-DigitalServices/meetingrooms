@@ -18,7 +18,7 @@ export default function Header({ session }: Props) {
       </div>
 
       {/* Desktop nav */}
-      <NavLinks isAdmin={session.isAdmin} />
+      <NavLinks isAdmin={session.isAdmin} isStaff={session.isStaff} />
 
       {/* Right: user menu */}
       <UserMenu displayName={session.displayName} />

@@ -8,6 +8,7 @@ const NAV = [
   { href: "/", icon: "search", label: "Rooms" },
   { href: "/bookings", icon: "event_note", label: "Bookings" },
   { href: "/minibus", icon: "directions_bus", label: "Minibus" },
+  { href: "/carpark", icon: "local_parking", label: "Car Park" },
 ];
 
 export default function BottomNav() {
