@@ -11,6 +11,7 @@ import { writeAudit } from "@/lib/db/audit";
 import {
   shouldNotifyPremises,
   sendPremisesNotification,
+  sendParkingConfirmation,
   computePremisesHash,
   formatLocal,
 } from "@/lib/mailer";
@@ -157,14 +158,15 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     let graphEvent;
     try {
       graphEvent = await createGraphEvent(primaryMbox, {
-        organiserUpn:     input.organiserUpn,
-        organiserName:    input.organiserName,
-        subject:          input.subject,
-        startUtc:         start,
-        endUtc:           end,
-        resourceMailboxes: mailboxes,
-        source:           "PORTAL",
-        bookingId:        "pending", // patched asynchronously below
+        organiserUpn:        input.organiserUpn,
+        organiserName:       input.organiserName,
+        subject:             input.subject,
+        startUtc:            start,
+        endUtc:              end,
+        resourceMailboxes:   mailboxes,
+        source:              "PORTAL",
+        bookingId:           "pending", // patched asynchronously below
+        skipOrganiserInvite: isParking,
       });
       clearGraphDegraded();
     } catch {
@@ -233,6 +235,22 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         portalUrl:       PUBLIC_BASE_URL,
         actorUpn:        input.actor.upn,
       });
+    }
+
+    // Parking: send email confirmation in place of calendar invite
+    if (isParking) {
+      const { PUBLIC_BASE_URL } = getConfig();
+      sendParkingConfirmation({
+        bookingId:       created.id,
+        organiserUpn:    input.organiserUpn,
+        organiserName:   input.organiserName,
+        poolDisplayName: room.displayName,
+        startUtc:        start,
+        endUtc:          end,
+        portalUrl:       PUBLIC_BASE_URL,
+      }).catch((err) =>
+        logger.warn({ err, bookingId: created.id }, "mailer: parking_confirmation fire-and-forget failed")
+      );
     }
 
     return created;

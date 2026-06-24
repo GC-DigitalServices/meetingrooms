@@ -103,6 +103,50 @@ export async function sendAdminAlert(subject: string, body: string): Promise<voi
   }
 }
 
+export async function sendParkingConfirmation(params: {
+  bookingId: string;
+  organiserUpn: string;
+  organiserName: string;
+  poolDisplayName: string;
+  startUtc: Date;
+  endUtc: Date;
+  portalUrl: string;
+}): Promise<void> {
+  const { MAIL_SENDER_UPN } = getConfig();
+  if (!MAIL_SENDER_UPN) return;
+
+  const start = formatLocal(params.startUtc);
+  const end   = formatLocal(params.endUtc);
+
+  const body = [
+    `Hi ${params.organiserName},`,
+    ``,
+    `Your visitor car park bay has been booked.`,
+    ``,
+    `Car Park: ${params.poolDisplayName}`,
+    `Date/Time: ${start} – ${end.split(", ")[1] ?? end}`,
+    ``,
+    `To cancel this booking, visit: ${params.portalUrl}/bookings`,
+  ].join("\n");
+
+  try {
+    await graphClient.post(
+      `/users/${encodeURIComponent(MAIL_SENDER_UPN)}/sendMail`,
+      {
+        message: {
+          subject: `Visitor car park booking confirmed — ${start}`,
+          body: { contentType: "Text", content: body },
+          toRecipients: [{ emailAddress: { address: params.organiserUpn, name: params.organiserName } }],
+        },
+        saveToSentItems: false,
+      }
+    );
+    logger.info({ bookingId: params.bookingId }, "mailer: parking_confirmation_sent");
+  } catch (err) {
+    logger.error({ bookingId: params.bookingId, err }, "mailer: parking_confirmation_failed");
+  }
+}
+
 export async function sendPremisesNotification(params: PremisesNotifyParams): Promise<void> {
   const { MAIL_SENDER_UPN } = getConfig();
   if (!MAIL_SENDER_UPN) {

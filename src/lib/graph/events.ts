@@ -16,6 +16,8 @@ export interface CreateEventInput {
   resourceMailboxes: string[]; // invited as type=resource
   source: "PORTAL" | "IPAD_QR";
   bookingId: string;
+  /** When true, the organiser is NOT added as an attendee — no calendar invite is sent. */
+  skipOrganiserInvite?: boolean;
 }
 
 function utcString(d: Date): string {
@@ -44,10 +46,10 @@ export async function createGraphEvent(
           emailAddress: { address: upn },
           type: "resource",
         })),
-        {
+        ...(input.skipOrganiserInvite ? [] : [{
           emailAddress: { address: input.organiserUpn, name: input.organiserName },
           type: "required",
-        },
+        }]),
       ],
       singleValueExtendedProperties: [
         { id: ORGANISER_UPN_PROP_ID, value: input.organiserUpn },
