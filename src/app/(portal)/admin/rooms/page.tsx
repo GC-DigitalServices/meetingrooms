@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, Lock, Pencil } from "lucide-react";
+import { Users, Lock, Pencil, Trash2 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -388,6 +388,18 @@ export default function AdminRoomsPage() {
 
   useEffect(() => { void load(); }, []);
 
+  async function deleteRoom(room: Room) {
+    if (!confirm(`Delete "${room.displayName}"? This cannot be undone.`)) return;
+    const res = await fetch(`/api/admin/rooms/${room.id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast.success("Room deleted");
+      void load();
+    } else {
+      const data = (await res.json()) as { error?: { message?: string } };
+      toast.error(data.error?.message ?? "Failed to delete room.");
+    }
+  }
+
   function openAdd() {
     setEditRoom(null);
     setDialogOpen(true);
@@ -458,10 +470,15 @@ export default function AdminRoomsPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {EDITABLE_KINDS.has(room.kind) ? (
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(room)}>
-                      <Pencil className="h-3.5 w-3.5 mr-1" />
-                      Edit
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(room)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => deleteRoom(room)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   ) : (
                     <span className="text-xs text-muted-foreground">Read-only</span>
                   )}
