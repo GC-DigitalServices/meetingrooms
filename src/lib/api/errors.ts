@@ -65,6 +65,7 @@ export function bookingServiceError(err: unknown): NextResponse {
   if (err instanceof Error) {
     const code = DOMAIN_ERROR_CODES[err.constructor.name];
     if (code) return apiError(code, err.message);
+    return apiError("INTERNAL_ERROR", `[${err.constructor.name}] ${err.message}`);
   }
-  return apiError("INTERNAL_ERROR", "An unexpected error occurred");
+  return apiError("INTERNAL_ERROR", `Unexpected throw: ${String(err)}`);
 }
