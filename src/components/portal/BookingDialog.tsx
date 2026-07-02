@@ -71,6 +71,7 @@ export default function BookingDialog({
   onSuccess,
 }: BookingDialogProps) {
   const [selectedDate, setSelectedDate] = useState(date ?? today());
+  const [endDate, setEndDate] = useState(date ?? today());
   const [startTime, setStartTime] = useState(initialStart);
   const [endTime, setEndTime] = useState(initialEnd);
   const [subject, setSubject] = useState("");
@@ -91,6 +92,7 @@ export default function BookingDialog({
   useEffect(() => {
     if (open) {
       setSelectedDate(date ?? today());
+      setEndDate(date ?? today());
       setStartTime(initialStart);
       setEndTime(initialEnd);
       setSubject("");
@@ -127,15 +129,16 @@ export default function BookingDialog({
     return () => clearTimeout(timer);
   }, [open, selectedDate, startTime, endTime, roomId]);
 
-  // Keep endTime always after startTime
+  // Keep endTime always after startTime (only when start and end are on the same day)
   useEffect(() => {
+    if (endDate > selectedDate) return;
     const startIdx = TIME_OPTIONS.findIndex((t) => t.value === startTime);
     const endIdx = TIME_OPTIONS.findIndex((t) => t.value === endTime);
     if (endIdx <= startIdx) {
       const next = TIME_OPTIONS[Math.min(startIdx + 2, TIME_OPTIONS.length - 1)];
       setEndTime(next.value);
     }
-  }, [startTime, endTime]);
+  }, [startTime, endTime, selectedDate, endDate]);
 
   async function handleSubmit() {
     if (!isParking && !subject.trim()) {
@@ -173,7 +176,7 @@ export default function BookingDialog({
             roomId,
             subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
-            end:   toUTC(selectedDate, endTime),
+            end:   toUTC(isMinibus ? endDate : selectedDate, endTime),
             repeatWeeks,
             premisesNotes: finalPremisesNotes,
           }),
@@ -204,7 +207,7 @@ export default function BookingDialog({
             roomId,
             subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
-            end:   toUTC(selectedDate, endTime),
+            end:   toUTC(isMinibus ? endDate : selectedDate, endTime),
             premisesNotes: finalPremisesNotes,
           }),
         });
@@ -230,7 +233,9 @@ export default function BookingDialog({
     }
   }
 
-  const endOptions = TIME_OPTIONS.filter((t) => t.value > startTime);
+  const endOptions = (isMinibus && endDate > selectedDate)
+    ? TIME_OPTIONS
+    : TIME_OPTIONS.filter((t) => t.value > startTime);
 
   const repeatDates = repeatWeekly
     ? Array.from({ length: repeatWeeks }, (_, i) => {
@@ -248,54 +253,113 @@ export default function BookingDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div>
-            <Label htmlFor="bd-date">Date</Label>
-            <input
-              id="bd-date"
-              type="date"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              value={selectedDate}
-              min={minDate()}
-              max={maxDate()}
-              disabled={submitting}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="bd-start">Start time</Label>
-              <select
-                id="bd-start"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                value={startTime}
-                disabled={submitting}
-                onChange={(e) => setStartTime(e.target.value)}
-              >
-                {TIME_OPTIONS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.value}
-                  </option>
-                ))}
-              </select>
+          {isMinibus ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="bd-date">Start date</Label>
+                <input
+                  id="bd-date"
+                  type="date"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={selectedDate}
+                  min={minDate()}
+                  max={maxDate()}
+                  disabled={submitting}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    if (endDate < e.target.value) setEndDate(e.target.value);
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="bd-start">Start time</Label>
+                <select
+                  id="bd-start"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={startTime}
+                  disabled={submitting}
+                  onChange={(e) => setStartTime(e.target.value)}
+                >
+                  {TIME_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>{t.value}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="bd-enddate">End date</Label>
+                <input
+                  id="bd-enddate"
+                  type="date"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={endDate}
+                  min={selectedDate}
+                  max={maxDate()}
+                  disabled={submitting}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="bd-end">End time</Label>
+                <select
+                  id="bd-end"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={endTime}
+                  disabled={submitting}
+                  onChange={(e) => setEndTime(e.target.value)}
+                >
+                  {endOptions.map((t) => (
+                    <option key={t.value} value={t.value}>{t.value}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="bd-end">End time</Label>
-              <select
-                id="bd-end"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                value={endTime}
-                disabled={submitting}
-                onChange={(e) => setEndTime(e.target.value)}
-              >
-                {endOptions.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.value}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="bd-date">Date</Label>
+                <input
+                  id="bd-date"
+                  type="date"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={selectedDate}
+                  min={minDate()}
+                  max={maxDate()}
+                  disabled={submitting}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="bd-start">Start time</Label>
+                  <select
+                    id="bd-start"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={startTime}
+                    disabled={submitting}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  >
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.value}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="bd-end">End time</Label>
+                  <select
+                    id="bd-end"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={endTime}
+                    disabled={submitting}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  >
+                    {endOptions.map((t) => (
+                      <option key={t.value} value={t.value}>{t.value}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
 
           {conflictWarning && (
             <p className="flex items-center gap-1 text-sm text-amber-600">
