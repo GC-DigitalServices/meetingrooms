@@ -3,7 +3,7 @@ import { canUserBookRoom, wouldPassWithoutAdmin } from "./permissions";
 import { findConflict } from "./conflicts";
 import { snapToSlot, validateDuration } from "./duration";
 import { resolveBookingMailboxes, bookingLockKey } from "./mailboxes";
-import { ConflictError, NotOrganiserError, GraphUnavailableError } from "./errors";
+import { ConflictError, NotOrganiserError, GraphUnavailableError, RoomNotBookableError } from "./errors";
 import { isGraphDegraded, markGraphDegraded, clearGraphDegraded } from "./graph-health";
 import { withLock } from "@/lib/realtime/lock";
 import { createGraphEvent, updateGraphEvent, deleteGraphEvent } from "@/lib/graph/events";
@@ -117,7 +117,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   if (room.kind !== "MINIBUS") validateDuration(start, end);
 
   if (room.kind === "MINIBUS" && !input.premisesNotes?.trim()) {
-    throw new Error("Minibus bookings require premisesNotes (destination, passengers, driver)");
+    throw new RoomNotBookableError("Destination, passengers and driver are required for minibus bookings.");
   }
 
   const isParking = room.kind === "PARKING";

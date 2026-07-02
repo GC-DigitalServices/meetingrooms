@@ -1,3 +1,5 @@
+import { RoomNotBookableError } from "./errors";
+
 interface RoomMailboxInput {
   id: string;
   kind: string;
@@ -22,13 +24,13 @@ export function resolveBookingMailboxes(
       .map((s) => s.mailboxUpn)
       .filter((u): u is string => u !== null);
     if (upns.length === 0) {
-      throw new Error(`Composite room ${room.id} has no section mailboxes`);
+      throw new RoomNotBookableError("This room has no calendar mailboxes configured — contact your administrator.");
     }
     return upns;
   }
 
   if (!room.mailboxUpn) {
-    throw new Error(`Room ${room.id} has no mailboxUpn`);
+    throw new RoomNotBookableError("This room does not have a calendar mailbox configured — contact your administrator.");
   }
   return [room.mailboxUpn];
 }
