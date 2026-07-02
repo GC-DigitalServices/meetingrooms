@@ -114,7 +114,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   // Snap and validate
   const start = snapToSlot(input.start);
   const end   = snapToSlot(input.end);
-  validateDuration(start, end);
+  if (room.kind !== "MINIBUS") validateDuration(start, end);
 
   if (room.kind === "MINIBUS" && !input.premisesNotes?.trim()) {
     throw new Error("Minibus bookings require premisesNotes (destination, passengers, driver)");
