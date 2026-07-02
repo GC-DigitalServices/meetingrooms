@@ -169,9 +169,11 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         skipOrganiserInvite: isParking,
       });
       clearGraphDegraded();
-    } catch {
+    } catch (graphErr) {
       markGraphDegraded();
-      throw new GraphUnavailableError();
+      throw new GraphUnavailableError(
+        graphErr instanceof Error ? graphErr.message : "Graph API error"
+      );
     }
 
     // 5. Postgres mirror
