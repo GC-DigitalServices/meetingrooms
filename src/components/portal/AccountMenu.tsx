@@ -43,10 +43,14 @@ export default function AccountMenu({ session }: Props) {
           </>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <form action="/api/auth/logout" method="POST" className="w-full">
-            <button type="submit" className="w-full text-left">Sign out</button>
-          </form>
+        <DropdownMenuItem onSelect={() => {
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = "/api/auth/logout";
+          document.body.appendChild(form);
+          form.submit();
+        }}>
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
