@@ -10,7 +10,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   if (sessionId) await deleteSession(sessionId);
 
-  const response = NextResponse.redirect(`${PUBLIC_BASE_URL}/`);
+  const response = NextResponse.redirect(`${PUBLIC_BASE_URL}/`, { status: 303 });
   response.cookies.set("session", "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
