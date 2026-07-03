@@ -78,7 +78,7 @@ export default async function CarParkPage({
     <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
       <h1 className="font-extrabold text-headline-xl text-on-background mb-lg">Visitor Car Park</h1>
 
-      <CarparkDateNav selectedDate={selectedDate} today={todayStr} maxDate={maxDateStr} />
+      <CarparkDateNav selectedDate={selectedDate} today={todayStr} maxDate={maxDateStr} basePath="/carpark" />
 
       <div className="space-y-10 max-w-2xl">
         {pools.map((pool) => {

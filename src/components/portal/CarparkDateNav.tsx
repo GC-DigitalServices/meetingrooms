@@ -6,6 +6,7 @@ interface Props {
   selectedDate: string; // YYYY-MM-DD
   today: string;        // YYYY-MM-DD
   maxDate: string;      // YYYY-MM-DD
+  basePath: string;     // e.g. "/carpark" or "/minibus"
 }
 
 function addDays(dateStr: string, delta: number): string {
@@ -15,14 +16,14 @@ function addDays(dateStr: string, delta: number): string {
   return date.toLocaleDateString("en-CA");
 }
 
-export function CarparkDateNav({ selectedDate, today, maxDate }: Props) {
+export function CarparkDateNav({ selectedDate, today, maxDate, basePath }: Props) {
   const router = useRouter();
 
   function go(dateStr: string) {
     if (dateStr === today) {
-      router.push("/carpark");
+      router.push(basePath);
     } else {
-      router.push(`/carpark?date=${dateStr}`);
+      router.push(`${basePath}?date=${dateStr}`);
     }
   }
 

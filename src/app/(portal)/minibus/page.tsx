@@ -101,7 +101,7 @@ export default async function MinibusPage({
 
   return (
     <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
-      <CarparkDateNav selectedDate={selectedDate} today={todayStr} maxDate={maxDateStr} />
+      <CarparkDateNav selectedDate={selectedDate} today={todayStr} maxDate={maxDateStr} basePath="/minibus" />
       <MinibusClient
         minibuses={minibuses.map((m: { id: string; displayName: string; capacity: number }) => ({
           id: m.id,
