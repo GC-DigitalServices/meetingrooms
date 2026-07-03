@@ -44,7 +44,9 @@ export default function AccountMenu({ session }: Props) {
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <a href="/api/auth/logout">Sign out</a>
+          <form action="/api/auth/logout" method="POST" className="w-full">
+            <button type="submit" className="w-full text-left">Sign out</button>
+          </form>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
