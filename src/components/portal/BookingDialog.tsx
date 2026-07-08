@@ -31,6 +31,23 @@ function toUTC(date: string, time: string): string {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
+function toMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function toHHMM(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function friendlyDate(date: string): string {
+  return new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export interface BookingDialogProps {
   open: boolean;
   onClose: () => void;
@@ -81,6 +98,7 @@ export default function BookingDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+  const [suggestedSlot, setSuggestedSlot] = useState<{ start: string; end: string } | null>(null);
   const [premisesError, setPremisesError] = useState<string | null>(null);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
@@ -101,33 +119,66 @@ export default function BookingDialog({
       setAssistanceNotes("");
       setError(null);
       setConflictWarning(null);
+      setSuggestedSlot(null);
       setPremisesError(null);
       setRepeatWeekly(false);
       setRepeatWeeks(4);
     }
   }, [open, date, initialStart, initialEnd]);
 
-  // Inline conflict check — debounced 600ms after time/date changes
+  // Inline conflict check — debounced 600ms after time/date changes.
+  // On conflict, also look up the room's bookings that day and suggest the
+  // next free slot of the same duration.
   useEffect(() => {
     if (!open) return;
     setConflictWarning(null);
+    setSuggestedSlot(null);
     const from = toUTC(selectedDate, startTime);
     const to = toUTC(selectedDate, endTime);
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+          `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         );
         if (!res.ok) return;
-        const data = await res.json() as Record<string, { free: boolean }>;
+        const data = (await res.json()) as Record<string, { free: boolean }>;
         const info = data[roomId];
-        if (info && !info.free) {
-          setConflictWarning("This time slot is already booked.");
+        if (!info || info.free) return;
+        setConflictWarning("This time slot is already booked.");
+
+        if (isMinibus) return;
+        const dayFrom = toUTC(selectedDate, "07:00");
+        const dayTo = toUTC(selectedDate, "21:00");
+        const bres = await fetch(
+          `/api/rooms/${roomId}/bookings?from=${encodeURIComponent(dayFrom)}&to=${encodeURIComponent(dayTo)}`,
+        );
+        if (!bres.ok) return;
+        const busy = ((await bres.json()) as { startUtc: string; endUtc: string }[]).map((b) => ({
+          s: new Date(b.startUtc).getTime(),
+          e: new Date(b.endUtc).getTime(),
+        }));
+
+        const durMin = toMinutes(endTime) - toMinutes(startTime);
+        const lastEnd = 20 * 60; // slots must finish by 20:00
+        const nowMs = Date.now();
+        for (const t of TIME_OPTIONS) {
+          if (t.value <= startTime) continue;
+          const startMin = toMinutes(t.value);
+          if (startMin + durMin > lastEnd) break;
+          const s = new Date(`${selectedDate}T${t.value}:00`).getTime();
+          if (s < nowMs) continue;
+          const e = s + durMin * 60_000;
+          if (!busy.some((b) => b.s < e && b.e > s)) {
+            setSuggestedSlot({ start: t.value, end: toHHMM(startMin + durMin) });
+            break;
+          }
         }
-      } catch { /* silently fail */ }
+      } catch {
+        /* silently fail */
+      }
     }, 600);
     return () => clearTimeout(timer);
-  }, [open, selectedDate, startTime, endTime, roomId]);
+  }, [open, selectedDate, startTime, endTime, roomId, isMinibus]);
 
   // Keep endTime always after startTime (only when start and end are on the same day)
   useEffect(() => {
@@ -146,7 +197,9 @@ export default function BookingDialog({
       return;
     }
     if (isMinibus && !premisesNotes.trim()) {
-      setError("Destination, number of passengers and driver name are required for minibus bookings.");
+      setError(
+        "Destination, number of passengers and driver name are required for minibus bookings.",
+      );
       return;
     }
     if (needAssistance && !assistanceNotes.trim()) {
@@ -161,8 +214,8 @@ export default function BookingDialog({
     const finalPremisesNotes = isMinibus
       ? premisesNotes.trim() || null
       : needAssistance
-      ? assistanceNotes.trim() || null
-      : null;
+        ? assistanceNotes.trim() || null
+        : null;
 
     try {
       let ok = false;
@@ -176,24 +229,40 @@ export default function BookingDialog({
             roomId,
             subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
-            end:   toUTC(isMinibus ? endDate : selectedDate, endTime),
+            end: toUTC(isMinibus ? endDate : selectedDate, endTime),
             repeatWeeks,
             premisesNotes: finalPremisesNotes,
           }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { created: unknown[]; skipped: unknown[]; aborted: boolean };
+          const data = (await res.json()) as {
+            created: unknown[];
+            skipped: unknown[];
+            aborted: boolean;
+          };
           const createdCount = data.created.length;
           const skippedCount = data.skipped.length;
           if (createdCount === 0) {
             errorMsg = "No bookings could be created — all weeks are already taken.";
           } else {
             ok = true;
-            const msg = skippedCount > 0
-              ? `${createdCount} of ${repeatWeeks} bookings created. ${skippedCount} week${skippedCount > 1 ? "s were" : " was"} already taken.`
-              : `${createdCount} weekly booking${createdCount > 1 ? "s" : ""} created.`;
-            toast.success(msg);
-            if (data.aborted) toast.warning("Some weeks could not be created — calendar system temporarily unavailable.");
+            const msg =
+              skippedCount > 0
+                ? `${createdCount} of ${repeatWeeks} bookings created. ${skippedCount} week${skippedCount > 1 ? "s were" : " was"} already taken.`
+                : `${createdCount} weekly booking${createdCount > 1 ? "s" : ""} created.`;
+            toast.success(msg, {
+              description: `${roomName} · ${friendlyDate(selectedDate)} · ${startTime}–${endTime}`,
+              action: {
+                label: "My bookings",
+                onClick: () => {
+                  window.location.href = "/bookings";
+                },
+              },
+            });
+            if (data.aborted)
+              toast.warning(
+                "Some weeks could not be created — calendar system temporarily unavailable.",
+              );
           }
         } else {
           const data = (await res.json()) as { error?: { message?: string } };
@@ -207,13 +276,21 @@ export default function BookingDialog({
             roomId,
             subject: subject.trim(),
             start: toUTC(selectedDate, startTime),
-            end:   toUTC(isMinibus ? endDate : selectedDate, endTime),
+            end: toUTC(isMinibus ? endDate : selectedDate, endTime),
             premisesNotes: finalPremisesNotes,
           }),
         });
         if (res.ok) {
           ok = true;
-          toast.success("Room booked successfully");
+          toast.success(isParking ? "Bay booked" : `Booked ${roomName}`, {
+            description: `${friendlyDate(selectedDate)} · ${startTime}–${endTime}`,
+            action: {
+              label: "My bookings",
+              onClick: () => {
+                window.location.href = "/bookings";
+              },
+            },
+          });
         } else {
           const data = (await res.json()) as { error?: { message?: string } };
           errorMsg = data.error?.message ?? "Booking failed. Please try again.";
@@ -233,9 +310,10 @@ export default function BookingDialog({
     }
   }
 
-  const endOptions = (isMinibus && endDate > selectedDate)
-    ? TIME_OPTIONS
-    : TIME_OPTIONS.filter((t) => t.value > startTime);
+  const endOptions =
+    isMinibus && endDate > selectedDate
+      ? TIME_OPTIONS
+      : TIME_OPTIONS.filter((t) => t.value > startTime);
 
   const repeatDates = repeatWeekly
     ? Array.from({ length: repeatWeeks }, (_, i) => {
@@ -281,7 +359,9 @@ export default function BookingDialog({
                   onChange={(e) => setStartTime(e.target.value)}
                 >
                   {TIME_OPTIONS.map((t) => (
-                    <option key={t.value} value={t.value}>{t.value}</option>
+                    <option key={t.value} value={t.value}>
+                      {t.value}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -308,7 +388,9 @@ export default function BookingDialog({
                   onChange={(e) => setEndTime(e.target.value)}
                 >
                   {endOptions.map((t) => (
-                    <option key={t.value} value={t.value}>{t.value}</option>
+                    <option key={t.value} value={t.value}>
+                      {t.value}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -339,7 +421,9 @@ export default function BookingDialog({
                     onChange={(e) => setStartTime(e.target.value)}
                   >
                     {TIME_OPTIONS.map((t) => (
-                      <option key={t.value} value={t.value}>{t.value}</option>
+                      <option key={t.value} value={t.value}>
+                        {t.value}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -353,7 +437,9 @@ export default function BookingDialog({
                     onChange={(e) => setEndTime(e.target.value)}
                   >
                     {endOptions.map((t) => (
-                      <option key={t.value} value={t.value}>{t.value}</option>
+                      <option key={t.value} value={t.value}>
+                        {t.value}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -362,10 +448,31 @@ export default function BookingDialog({
           )}
 
           {conflictWarning && (
-            <p className="flex items-center gap-1 text-sm text-amber-600">
-              <span className="material-symbols-outlined text-sm">warning</span>
-              {conflictWarning}
-            </p>
+            <div className="space-y-2">
+              <p className="flex items-center gap-1 text-sm text-amber-600" role="alert">
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                  warning
+                </span>
+                {conflictWarning}
+              </p>
+              {suggestedSlot && (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => {
+                    setStartTime(suggestedSlot.start);
+                    setEndTime(suggestedSlot.end);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-primary bg-primary/5 text-primary text-sm font-medium hover:bg-primary/10 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    event_available
+                  </span>
+                  Free at {suggestedSlot.start} — use {suggestedSlot.start} – {suggestedSlot.end}{" "}
+                  instead
+                </button>
+              )}
+            </div>
           )}
 
           {isParking ? (
@@ -416,7 +523,8 @@ export default function BookingDialog({
                   if (premisesError && e.target.value.trim()) setPremisesError(null);
                 }}
                 onBlur={() => {
-                  if (!premisesNotes.trim()) setPremisesError("Destination, passengers and driver name are required.");
+                  if (!premisesNotes.trim())
+                    setPremisesError("Destination, passengers and driver name are required.");
                 }}
               />
               {premisesError && <p className="mt-1 text-sm text-destructive">{premisesError}</p>}
@@ -429,6 +537,7 @@ export default function BookingDialog({
               <button
                 type="button"
                 onClick={() => setNeedAssistance((v) => !v)}
+                aria-expanded={needAssistance}
                 disabled={submitting}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
                   needAssistance
@@ -437,10 +546,12 @@ export default function BookingDialog({
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base">build</span>
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    build
+                  </span>
                   Request premises assistance
                 </span>
-                <span className="material-symbols-outlined text-base">
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
                   {needAssistance ? "expand_less" : "expand_more"}
                 </span>
               </button>
@@ -468,6 +579,7 @@ export default function BookingDialog({
               <button
                 type="button"
                 onClick={() => setRepeatWeekly((v) => !v)}
+                aria-expanded={repeatWeekly}
                 disabled={submitting}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-label-md font-label-md transition-all ${
                   repeatWeekly
@@ -476,10 +588,12 @@ export default function BookingDialog({
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-base">event_repeat</span>
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    event_repeat
+                  </span>
                   Repeat weekly
                 </span>
-                <span className="material-symbols-outlined text-base">
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
                   {repeatWeekly ? "expand_less" : "expand_more"}
                 </span>
               </button>
@@ -487,7 +601,9 @@ export default function BookingDialog({
               {repeatWeekly && (
                 <div className="mt-2 space-y-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-label-sm font-label-sm text-on-surface-variant whitespace-nowrap">Number of weeks</label>
+                    <label className="text-label-sm font-label-sm text-on-surface-variant whitespace-nowrap">
+                      Number of weeks
+                    </label>
                     <select
                       className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={repeatWeeks}
@@ -495,7 +611,9 @@ export default function BookingDialog({
                       onChange={(e) => setRepeatWeeks(Number(e.target.value))}
                     >
                       {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                        <option key={n} value={n}>{n} weeks</option>
+                        <option key={n} value={n}>
+                          {n} weeks
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -514,8 +632,17 @@ export default function BookingDialog({
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || (!isParking && !subject.trim())}>
-            {submitting ? "Booking…" : isParking ? "Book a bay" : "Book meeting room"}
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || (!isParking && !subject.trim()) || !!conflictWarning}
+          >
+            {submitting
+              ? "Booking…"
+              : conflictWarning
+                ? "Time unavailable"
+                : isParking
+                  ? "Book a bay"
+                  : "Book meeting room"}
           </Button>
         </DialogFooter>
       </DialogContent>

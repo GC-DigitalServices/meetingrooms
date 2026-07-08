@@ -8,13 +8,12 @@ const NAV = [
   { href: "/", icon: "search", label: "Rooms" },
   { href: "/bookings", icon: "event_note", label: "Bookings" },
   { href: "/minibus", icon: "directions_bus", label: "Minibus" },
-  { href: "/carpark", icon: "local_parking", label: "Visitor Car Park" },
+  { href: "/carpark", icon: "local_parking", label: "Car Park" },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface shadow-lg border-t border-outline-variant rounded-t-xl">
@@ -22,14 +21,19 @@ export default function BottomNav() {
         <Link
           key={href}
           href={href}
+          aria-label={label}
+          aria-current={isActive(href) ? "page" : undefined}
           className={cn(
             "flex flex-col items-center justify-center gap-0.5 px-4 py-1 rounded-full transition-all active:scale-90",
             isActive(href)
               ? "bg-secondary-container text-on-secondary-container"
-              : "text-on-surface-variant"
+              : "text-on-surface-variant",
           )}
         >
-          <span className={cn("material-symbols-outlined text-xl", isActive(href) && "filled")}>
+          <span
+            className={cn("material-symbols-outlined text-xl", isActive(href) && "filled")}
+            aria-hidden="true"
+          >
             {icon}
           </span>
           <span className="hidden min-[400px]:block text-label-sm font-label-sm">{label}</span>

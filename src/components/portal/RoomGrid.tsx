@@ -37,10 +37,25 @@ type Action =
 
 function reducer(state: BookingsMap, action: Action): BookingsMap {
   switch (action.type) {
-    case "SNAPSHOT": return { ...state, [action.roomId]: action.bookings };
-    case "ADD": return { ...state, [action.booking.roomId]: [...(state[action.booking.roomId] ?? []), action.booking] };
-    case "UPDATE": return { ...state, [action.booking.roomId]: (state[action.booking.roomId] ?? []).map(b => b.id === action.booking.id ? action.booking : b) };
-    case "DELETE": return { ...state, [action.roomId]: (state[action.roomId] ?? []).filter(b => b.id !== action.bookingId) };
+    case "SNAPSHOT":
+      return { ...state, [action.roomId]: action.bookings };
+    case "ADD":
+      return {
+        ...state,
+        [action.booking.roomId]: [...(state[action.booking.roomId] ?? []), action.booking],
+      };
+    case "UPDATE":
+      return {
+        ...state,
+        [action.booking.roomId]: (state[action.booking.roomId] ?? []).map((b) =>
+          b.id === action.booking.id ? action.booking : b,
+        ),
+      };
+    case "DELETE":
+      return {
+        ...state,
+        [action.roomId]: (state[action.roomId] ?? []).filter((b) => b.id !== action.bookingId),
+      };
   }
 }
 
@@ -50,8 +65,12 @@ function buildInitialMap(bookings: BookingSlot[]): BookingsMap {
   return map;
 }
 
+function toLondonDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toLondonDate(new Date());
 }
 
 function nextQuarterHour() {
@@ -68,31 +87,41 @@ function addHours(time: string, h: number) {
   return `${String(total % 24).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+function addMinutes(time: string, mins: number) {
+  const [hh, mm] = time.split(":").map(Number);
+  const total = Math.min(hh * 60 + mm + mins, 21 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
-  const today = now.toISOString().slice(0, 10);
+  const today = toLondonDate(now);
   const next = bookings
-    .filter(b => new Date(b.startUtc) > now)
+    .filter((b) => new Date(b.startUtc) > now)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
-  if (!next || next.startUtc.slice(0, 10) !== today) return "Free all day";
+  if (!next || toLondonDate(new Date(next.startUtc)) !== today) return "Free all day";
   return `Free until ${localTime(next.startUtc)}`;
 }
 
 function busyUntilLabel(bookings: BookingSlot[], now: Date): string {
-  const current = bookings.find(
-    b => new Date(b.startUtc) <= now && new Date(b.endUtc) > now
-  );
+  const current = bookings.find((b) => new Date(b.startUtc) <= now && new Date(b.endUtc) > now);
   return current ? `Busy until ${localTime(current.endUtc)}` : "";
 }
 
 function bookedAtLabel(bookings: BookingSlot[], now: Date): string {
   const soon = new Date(now.getTime() + 30 * 60 * 1000);
   const next = bookings
-    .filter(b => new Date(b.startUtc) > now && new Date(b.startUtc) <= soon)
+    .filter((b) => new Date(b.startUtc) > now && new Date(b.startUtc) <= soon)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
   return next ? `Booked at ${localTime(next.startUtc)}` : "";
 }
 
-export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, permittedRoomIds }: Props) {
+export default function RoomGrid({
+  rooms,
+  initialBookings,
+  isStaff,
+  isAdmin,
+  permittedRoomIds,
+}: Props) {
   const { socket } = useSocket();
   const [bookingsMap, dispatch] = useReducer(reducer, initialBookings, buildInitialMap);
 
@@ -103,8 +132,11 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   const [minCapacity, setMinCapacity] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [building, setBuilding] = useState<string | null>(null);
 
   const [avail, setAvail] = useState<Record<string, RoomAvailability>>({});
+  const [availLoading, setAvailLoading] = useState(false);
 
   const [favourites, setFavourites] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -117,10 +149,15 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
   });
 
   function toggleFavourite(roomId: string) {
-    setFavourites(prev => {
+    setFavourites((prev) => {
       const next = new Set(prev);
-      if (next.has(roomId)) next.delete(roomId); else next.add(roomId);
-      try { localStorage.setItem("mrbs:fav", JSON.stringify([...next])); } catch { /* ignore */ }
+      if (next.has(roomId)) next.delete(roomId);
+      else next.add(roomId);
+      try {
+        localStorage.setItem("mrbs:fav", JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   }
@@ -129,32 +166,52 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
   useEffect(() => {
     if (!socket) return;
-    const roomIds = rooms.map(r => r.id);
+    const roomIds = rooms.map((r) => r.id);
     socket.emit("message", { type: "subscribe", roomIds });
 
     function onMessage(msg: { type: string; payload: Record<string, unknown> }) {
       const p = msg.payload;
-      if (msg.type === "snapshot") dispatch({ type: "SNAPSHOT", roomId: p.roomId as string, bookings: p.bookings as BookingSlot[] });
-      else if (msg.type === "booking.created") dispatch({ type: "ADD", booking: p.booking as BookingSlot });
-      else if (msg.type === "booking.updated") dispatch({ type: "UPDATE", booking: p.booking as BookingSlot });
-      else if (msg.type === "booking.deleted") dispatch({ type: "DELETE", roomId: p.roomId as string, bookingId: p.bookingId as string });
+      if (msg.type === "snapshot")
+        dispatch({
+          type: "SNAPSHOT",
+          roomId: p.roomId as string,
+          bookings: p.bookings as BookingSlot[],
+        });
+      else if (msg.type === "booking.created")
+        dispatch({ type: "ADD", booking: p.booking as BookingSlot });
+      else if (msg.type === "booking.updated")
+        dispatch({ type: "UPDATE", booking: p.booking as BookingSlot });
+      else if (msg.type === "booking.deleted")
+        dispatch({ type: "DELETE", roomId: p.roomId as string, bookingId: p.bookingId as string });
     }
 
     socket.on("message", onMessage);
-    return () => { socket.off("message", onMessage); socket.emit("message", { type: "unsubscribe", roomIds }); };
+    return () => {
+      socket.off("message", onMessage);
+      socket.emit("message", { type: "unsubscribe", roomIds });
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const fetchAvailability = useCallback(async () => {
+    setAvailLoading(true);
     try {
       const from = new Date(`${filterDate}T${filterFrom}:00`).toISOString();
       const to = new Date(`${filterDate}T${filterTo}:00`).toISOString();
-      const res = await fetch(`/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      const res = await fetch(
+        `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      );
       if (res.ok) setAvail((await res.json()) as Record<string, RoomAvailability>);
-    } catch { /* ignore transient fetch errors */ }
+    } catch {
+      /* ignore transient fetch errors */
+    } finally {
+      setAvailLoading(false);
+    }
   }, [filterDate, filterFrom, filterTo]);
 
-  useEffect(() => { void fetchAvailability(); }, [fetchAvailability]);
+  useEffect(() => {
+    void fetchAvailability();
+  }, [fetchAvailability]);
 
   useEffect(() => {
     if (filterTo <= filterFrom) setFilterTo(addHours(filterFrom, 1));
@@ -162,9 +219,30 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
 
   const now = new Date();
 
+  const buildings = [
+    ...new Set(rooms.map((r) => r.building).filter((b): b is string => !!b)),
+  ].sort();
+
+  const searchLower = search.trim().toLowerCase();
+  const hasActiveFilters = searchLower !== "" || building !== null || minCapacity > 0 || onlyFree;
+
+  function clearFilters() {
+    setSearch("");
+    setBuilding(null);
+    setMinCapacity(0);
+    setOnlyFree(false);
+  }
+
   const filtered = rooms
-    .filter(r => {
+    .filter((r) => {
       if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
+      if (
+        searchLower &&
+        !r.displayName.toLowerCase().includes(searchLower) &&
+        !(r.building ?? "").toLowerCase().includes(searchLower)
+      )
+        return false;
+      if (building && r.building !== building) return false;
       if (r.capacity < minCapacity) return false;
       if (onlyFree && avail[r.id] && !avail[r.id].free) return false;
       return true;
@@ -181,7 +259,7 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
       return a.displayName.localeCompare(b.displayName);
     });
 
-  const freeCount = filtered.filter(r => avail[r.id]?.free !== false).length;
+  const freeCount = filtered.filter((r) => avail[r.id]?.free !== false).length;
 
   const TIME_OPTIONS = Array.from({ length: 57 }, (_, i) => {
     const m = 7 * 60 + i * 15;
@@ -191,9 +269,14 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
     return `${h}:${min}`;
   }).filter(Boolean) as string[];
 
-  const dateLabel = filterDate === todayStr()
-    ? "Today"
-    : new Date(filterDate + "T12:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const dateLabel =
+    filterDate === todayStr()
+      ? "Today"
+      : new Date(filterDate + "T12:00").toLocaleDateString("en-GB", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        });
 
   return (
     <div className="lg:flex lg:h-[calc(100vh-80px)] lg:overflow-hidden">
@@ -202,154 +285,308 @@ export default function RoomGrid({ rooms, initialBookings, isStaff, isAdmin, per
         {/* Mobile toggle button */}
         <button
           className="lg:hidden w-full flex items-center justify-between px-4 py-3"
-          onClick={() => setFiltersOpen(v => !v)}
+          onClick={() => setFiltersOpen((v) => !v)}
           aria-expanded={filtersOpen}
         >
           <span className="font-semibold text-sm text-on-surface">Search Filters</span>
-          <span className="material-symbols-outlined text-on-surface-variant text-base">
+          <span
+            className="material-symbols-outlined text-on-surface-variant text-base"
+            aria-hidden="true"
+          >
             {filtersOpen ? "expand_less" : "tune"}
           </span>
         </button>
 
         {/* Filter content — always visible on desktop, toggle on mobile */}
-        <div className={`${filtersOpen ? "block" : "hidden"} lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden`}>
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
-          <h2 className="font-bold text-base text-on-background hidden lg:block">Search Filters</h2>
-          {/* Date */}
-          <div>
-            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Date</label>
-            <input
-              type="date"
-              className="w-full rounded border border-outline-variant bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              value={filterDate}
-              min={todayStr()}
-              onChange={e => setFilterDate(e.target.value)}
-            />
-          </div>
-
-          {/* Time */}
-          <div>
-            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Time</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-xs text-on-surface-variant mb-1">From</p>
-                <select
-                  className="w-full rounded border border-outline-variant bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={filterFrom}
-                  onChange={e => setFilterFrom(e.target.value)}
+        <div
+          className={`${filtersOpen ? "block" : "hidden"} lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden`}
+        >
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+            <h2 className="font-bold text-base text-on-background hidden lg:block">
+              Search Filters
+            </h2>
+            {/* Room name search */}
+            <div>
+              <label
+                htmlFor="room-search"
+                className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2"
+              >
+                Room
+              </label>
+              <div className="relative">
+                <span
+                  className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-base text-on-surface-variant"
+                  aria-hidden="true"
                 >
-                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <p className="text-xs text-on-surface-variant mb-1">To</p>
-                <select
-                  className="w-full rounded border border-outline-variant bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={filterTo}
-                  onChange={e => setFilterTo(e.target.value)}
-                >
-                  {TIME_OPTIONS.filter(t => t > filterFrom).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  search
+                </span>
+                <input
+                  id="room-search"
+                  type="search"
+                  placeholder="Search by name or building"
+                  className="w-full rounded border border-outline-variant bg-surface-container-lowest pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
               </div>
             </div>
-          </div>
 
-          {/* Availability */}
-          <div>
-            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Availability</label>
-            <label className="flex items-center gap-3 cursor-pointer">
+            {/* Building */}
+            {buildings.length > 1 && (
+              <div>
+                <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">
+                  Building
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setBuilding(null)}
+                    aria-pressed={building === null}
+                    className={`px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
+                      building === null
+                        ? "border-primary bg-primary text-on-primary font-semibold"
+                        : "border-outline-variant hover:border-primary text-on-surface-variant"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {buildings.map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setBuilding((prev) => (prev === b ? null : b))}
+                      aria-pressed={building === b}
+                      className={`px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
+                        building === b
+                          ? "border-primary bg-primary text-on-primary font-semibold"
+                          : "border-outline-variant hover:border-primary text-on-surface-variant"
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Date */}
+            <div>
+              <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">
+                Date
+              </label>
               <input
-                type="checkbox"
-                checked={onlyFree}
-                onChange={e => setOnlyFree(e.target.checked)}
-                className="w-4 h-4 rounded accent-primary"
+                type="date"
+                className="w-full rounded border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                value={filterDate}
+                min={todayStr()}
+                onChange={(e) => setFilterDate(e.target.value)}
               />
-              <span className="text-sm text-on-surface">Show only available</span>
-            </label>
-            {!isStaff && !isAdmin && (
-              <label className="flex items-center gap-3 cursor-pointer mt-2">
+            </div>
+
+            {/* Time */}
+            <div>
+              <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">
+                Time
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-on-surface-variant mb-1">From</p>
+                  <select
+                    className="w-full rounded border border-outline-variant bg-surface-container-lowest px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={filterFrom}
+                    onChange={(e) => setFilterFrom(e.target.value)}
+                  >
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs text-on-surface-variant mb-1">To</p>
+                  <select
+                    className="w-full rounded border border-outline-variant bg-surface-container-lowest px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={filterTo}
+                    onChange={(e) => setFilterTo(e.target.value)}
+                  >
+                    {TIME_OPTIONS.filter((t) => t > filterFrom).map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {/* Quick picks: reset to now / set a duration from the start time */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <button
+                  onClick={() => {
+                    setFilterDate(todayStr());
+                    const from = nextQuarterHour();
+                    setFilterFrom(from);
+                    setFilterTo(addHours(from, 1));
+                  }}
+                  className="px-2.5 py-1 text-xs rounded-full border border-outline-variant hover:border-primary text-on-surface-variant transition-colors"
+                >
+                  Now
+                </button>
+                {[
+                  { label: "30 min", mins: 30 },
+                  { label: "1 hour", mins: 60 },
+                  { label: "2 hours", mins: 120 },
+                ].map(({ label, mins }) => (
+                  <button
+                    key={mins}
+                    onClick={() => setFilterTo(addMinutes(filterFrom, mins))}
+                    aria-pressed={filterTo === addMinutes(filterFrom, mins)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      filterTo === addMinutes(filterFrom, mins)
+                        ? "border-primary bg-primary text-on-primary font-semibold"
+                        : "border-outline-variant hover:border-primary text-on-surface-variant"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Availability */}
+            <div>
+              <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">
+                Availability
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={showAll}
-                  onChange={e => setShowAll(e.target.checked)}
+                  checked={onlyFree}
+                  onChange={(e) => setOnlyFree(e.target.checked)}
                   className="w-4 h-4 rounded accent-primary"
                 />
-                <span className="text-sm text-on-surface">Show all rooms</span>
+                <span className="text-sm text-on-surface">Show only available</span>
               </label>
-            )}
-          </div>
+              {!isStaff && !isAdmin && (
+                <label className="flex items-center gap-3 cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={showAll}
+                    onChange={(e) => setShowAll(e.target.checked)}
+                    className="w-4 h-4 rounded accent-primary"
+                  />
+                  <span className="text-sm text-on-surface">Show all rooms</span>
+                </label>
+              )}
+            </div>
 
-          {/* Capacity */}
-          <div>
-            <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">Capacity</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[0, 4, 10, 20].map(cap => (
-                <button
-                  key={cap}
-                  onClick={() => setMinCapacity(cap)}
-                  className={`py-2 text-sm rounded border transition-colors ${
-                    minCapacity === cap
-                      ? "border-primary bg-primary text-on-primary font-semibold"
-                      : "border-outline-variant hover:border-primary text-on-surface-variant"
-                  }`}
-                >
-                  {cap === 0 ? "Any" : `${cap}+`}
-                </button>
-              ))}
+            {/* Capacity */}
+            <div>
+              <label className="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider block mb-2">
+                Capacity
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[0, 4, 10, 20].map((cap) => (
+                  <button
+                    key={cap}
+                    onClick={() => setMinCapacity(cap)}
+                    className={`py-2 text-sm rounded border transition-colors ${
+                      minCapacity === cap
+                        ? "border-primary bg-primary text-on-primary font-semibold"
+                        : "border-outline-variant hover:border-primary text-on-surface-variant"
+                    }`}
+                  >
+                    {cap === 0 ? "Any" : `${cap}+`}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Apply button */}
-        <div className="p-4 border-t border-outline-variant/30">
-          <button
-            onClick={() => { void fetchAvailability(); setFiltersOpen(false); }}
-            className="w-full bg-primary text-on-primary py-2.5 rounded font-semibold text-sm hover:bg-primary-container transition-colors"
-          >
-            Apply Filters
-          </button>
+          {/* Show results — mobile only; results update live, this just closes the panel */}
+          <div className="p-4 border-t border-outline-variant/30 lg:hidden">
+            <button
+              onClick={() => setFiltersOpen(false)}
+              className="w-full bg-primary text-on-primary py-2.5 rounded font-semibold text-sm hover:bg-primary-container transition-colors"
+            >
+              Show results
+            </button>
+          </div>
         </div>
-        </div>{/* end toggle wrapper */}
+        {/* end toggle wrapper */}
       </aside>
 
       {/* ── Main content ──────────────────────────────────────────── */}
       <div className="flex-1 lg:overflow-y-auto custom-scrollbar">
         <div className="px-4 md:px-margin-desktop pt-lg pb-24 lg:pb-lg">
-          <h1 className="font-extrabold text-headline-xl text-on-background mb-lg">Meeting Room Finder</h1>
+          <h1 className="font-extrabold text-headline-xl text-on-background mb-lg">
+            Meeting Room Finder
+          </h1>
           {/* Result header */}
           <div className="flex justify-between items-end mb-md">
             <div>
-              <h1 className="font-bold text-2xl text-on-background">
+              <h2 className="font-bold text-2xl text-on-background">
                 {freeCount} room{freeCount !== 1 ? "s" : ""} available
-              </h1>
+              </h2>
               <p className="text-sm text-on-surface-variant mt-0.5">
                 {dateLabel}, {filterFrom} – {filterTo}
               </p>
             </div>
-            <p className="text-sm text-on-surface-variant">{filtered.length} shown</p>
+            <p className="text-sm text-on-surface-variant" aria-live="polite">
+              {availLoading ? "Checking availability…" : `${filtered.length} shown`}
+            </p>
           </div>
 
           {filtered.length === 0 ? (
-            <div className="bg-white rounded-xl border border-outline-variant/30 shadow-card p-lg text-center">
-              <span className="material-symbols-outlined text-5xl text-outline mb-4 block">search_off</span>
-              <p className="text-on-surface-variant">No meeting rooms match your filters.</p>
+            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-card p-lg text-center">
+              <span
+                className="material-symbols-outlined text-5xl text-outline mb-4 block"
+                aria-hidden="true"
+              >
+                search_off
+              </span>
+              <p className="text-on-surface-variant">
+                {!isAdmin && !showAll && permittedRoomIds.length === 0
+                  ? "You don't have booking access to any rooms right now."
+                  : "No meeting rooms match your filters."}
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {hasActiveFilters && (
+                  <button
+                    onClick={clearFilters}
+                    className="px-4 py-2 text-sm rounded-full border border-outline-variant hover:border-primary text-on-surface transition-colors"
+                  >
+                    Clear filters
+                  </button>
+                )}
+                {!isStaff && !isAdmin && !showAll && rooms.some((r) => !permitted.has(r.id)) && (
+                  <button
+                    onClick={() => setShowAll(true)}
+                    className="px-4 py-2 text-sm rounded-full bg-primary text-on-primary font-semibold hover:bg-primary-container transition-colors"
+                  >
+                    Show all rooms
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter">
-              {filtered.map(room => {
+              {filtered.map((room) => {
                 const bk = bookingsMap[room.id] ?? [];
                 const status = computeRoomStatus(bk, now);
                 const nextLabel =
-                  status === "busy" ? busyUntilLabel(bk, now)
-                  : status === "soon" ? bookedAtLabel(bk, now)
-                  : freeUntilLabel(bk, now);
+                  status === "busy"
+                    ? busyUntilLabel(bk, now)
+                    : status === "soon"
+                      ? bookedAtLabel(bk, now)
+                      : freeUntilLabel(bk, now);
 
-                const freeBayCount = room.kind === "PARKING" && room.bayIds
-                  ? room.bayIds.filter(bayId => {
-                      const bayBk = bookingsMap[bayId] ?? [];
-                      return !bayBk.some(b => new Date(b.startUtc) <= now && new Date(b.endUtc) > now);
-                    }).length
-                  : undefined;
+                const freeBayCount =
+                  room.kind === "PARKING" && room.bayIds
+                    ? room.bayIds.filter((bayId) => {
+                        const bayBk = bookingsMap[bayId] ?? [];
+                        return !bayBk.some(
+                          (b) => new Date(b.startUtc) <= now && new Date(b.endUtc) > now,
+                        );
+                      }).length
+                    : undefined;
 
                 return (
                   <RoomCard

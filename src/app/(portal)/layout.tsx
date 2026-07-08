@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Toaster } from "sonner";
 import { getServerSession } from "@/lib/auth/server";
@@ -6,6 +7,12 @@ import { SocketProvider } from "@/lib/socket-context";
 import Header from "@/components/portal/Header";
 import BottomNav from "@/components/portal/BottomNav";
 import ConnectionBanner from "@/components/portal/ConnectionBanner";
+
+// Installable PWA — students often land here from a QR scan on their phone.
+// The display app has its own manifest at /manifest.json.
+export const metadata: Metadata = {
+  manifest: "/portal.webmanifest",
+};
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession();
@@ -32,7 +39,8 @@ export default async function PortalLayout({ children }: { children: React.React
         {graphDegraded && (
           <div className="bg-[#fff8e1] border-b border-[#ffe082] px-margin-mobile md:px-margin-desktop py-2">
             <p className="text-sm font-medium text-[#e65100]">
-              ⚠ Booking service temporarily unavailable — new bookings may fail. Please try again shortly or contact IT.
+              ⚠ Booking service temporarily unavailable — new bookings may fail. Please try again
+              shortly or contact IT.
             </p>
           </div>
         )}
@@ -41,9 +49,7 @@ export default async function PortalLayout({ children }: { children: React.React
         <ConnectionBanner />
 
         {/* Main content */}
-        <main className="pt-20 min-h-screen pb-24 sm:pb-0">
-          {children}
-        </main>
+        <main className="pt-20 min-h-screen pb-24 sm:pb-0">{children}</main>
 
         {/* Mobile bottom navigation */}
         <BottomNav />

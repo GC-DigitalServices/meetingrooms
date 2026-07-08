@@ -1,0 +1,23 @@
+{
+  "name": "Greenhead College Room Booking",
+  "short_name": "GC Rooms",
+  "description": "Book meeting and study rooms at Greenhead College",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#003a35",
+  "icons": [
+    {
+      "src": "/icons/portal-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/portal-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

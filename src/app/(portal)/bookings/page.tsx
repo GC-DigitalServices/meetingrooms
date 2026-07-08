@@ -40,13 +40,28 @@ function groupByDay(bookings: BookingRow[]): [string, BookingRow[]][] {
 
 export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<BookingRow[] | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string; roomId: string } | null>(null);
-  const [cancelRecurringTarget, setCancelRecurringTarget] = useState<{ groupId: string; roomName: string; count: number } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<{
+    id: string;
+    roomName: string;
+    roomId: string;
+  } | null>(null);
+  const [cancelRecurringTarget, setCancelRecurringTarget] = useState<{
+    groupId: string;
+    roomName: string;
+    count: number;
+  } | null>(null);
   const [cancellingAll, setCancellingAll] = useState(false);
 
   async function load() {
-    const res = await fetch("/api/bookings/mine");
-    if (res.ok) setBookings((await res.json()) as BookingRow[]);
+    setLoadError(false);
+    try {
+      const res = await fetch("/api/bookings/mine");
+      if (res.ok) setBookings((await res.json()) as BookingRow[]);
+      else setLoadError(true);
+    } catch {
+      setLoadError(true);
+    }
   }
 
   async function handleCancelRemaining(groupId: string) {
@@ -69,7 +84,9 @@ export default function MyBookingsPage() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   const now = new Date();
   const upcoming = bookings?.filter((b) => isAfter(new Date(b.endUtc), now)) ?? [];
@@ -77,6 +94,29 @@ export default function MyBookingsPage() {
 
   const upcomingGroups = groupByDay(upcoming);
   const pastGroups = groupByDay(past).reverse();
+
+  if (bookings === null && loadError) {
+    return (
+      <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
+        <div className="max-w-xl">
+          <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">
+            My Bookings
+          </h1>
+          <div className="rounded-xl border border-outline-variant/30 p-6 text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Couldn&apos;t load your bookings. Check your connection and try again.
+            </p>
+            <button
+              onClick={() => void load()}
+              className="px-4 py-2 text-sm rounded-full bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (bookings === null) {
     return (
@@ -93,104 +133,120 @@ export default function MyBookingsPage() {
 
   return (
     <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
-    <div className="max-w-xl">
-      <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">My Bookings</h1>
+      <div className="max-w-xl">
+        <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">
+          My Bookings
+        </h1>
 
-      {upcomingGroups.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No upcoming bookings.{" "}
-          <Link href="/" className="text-primary underline-offset-2 hover:underline">
-            Find a room
-          </Link>
-        </p>
-      ) : (
-        <div className="space-y-6">
-          {upcomingGroups.map(([day, dayBookings]) => (
-            <div key={day}>
-              <h2 className="text-sm font-medium text-muted-foreground mb-3">
-                {format(new Date(day), "EEEE d MMMM yyyy")}
-              </h2>
-              <div className="space-y-2">
-                {dayBookings.map((b) => (
-                  <BookingRow
-                    key={b.id}
-                    booking={b}
-                    onCancel={() => setCancelTarget({ id: b.id, roomName: b.room.displayName, roomId: b.room.id })}
-                    onCancelRemaining={
-                      b.recurringGroupId
-                        ? () => {
-                            const count = upcoming.filter(u => u.recurringGroupId === b.recurringGroupId).length;
-                            setCancelRecurringTarget({ groupId: b.recurringGroupId!, roomName: b.room.displayName, count });
-                          }
-                        : undefined
-                    }
-                  />
+        {upcomingGroups.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No upcoming bookings.{" "}
+            <Link href="/" className="text-primary underline-offset-2 hover:underline">
+              Find a room
+            </Link>
+          </p>
+        ) : (
+          <div className="space-y-6">
+            {upcomingGroups.map(([day, dayBookings]) => (
+              <div key={day}>
+                <h2 className="text-sm font-medium text-muted-foreground mb-3">
+                  {format(new Date(day), "EEEE d MMMM yyyy")}
+                </h2>
+                <div className="space-y-2">
+                  {dayBookings.map((b) => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      onCancel={() =>
+                        setCancelTarget({
+                          id: b.id,
+                          roomName: b.room.displayName,
+                          roomId: b.room.id,
+                        })
+                      }
+                      onCancelRemaining={
+                        b.recurringGroupId
+                          ? () => {
+                              const count = upcoming.filter(
+                                (u) => u.recurringGroupId === b.recurringGroupId,
+                              ).length;
+                              setCancelRecurringTarget({
+                                groupId: b.recurringGroupId!,
+                                roomName: b.room.displayName,
+                                count,
+                              });
+                            }
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {pastGroups.length > 0 && (
+          <>
+            <Separator className="my-8" />
+            <details>
+              <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground select-none">
+                Past bookings ({past.length})
+              </summary>
+              <div className="mt-4 space-y-6">
+                {pastGroups.map(([day, dayBookings]) => (
+                  <div key={day}>
+                    <h2 className="text-sm font-medium text-muted-foreground mb-3">
+                      {format(new Date(day), "EEEE d MMMM yyyy")}
+                    </h2>
+                    <div className="space-y-2">
+                      {dayBookings.map((b) => (
+                        <BookingRow key={b.id} booking={b} past />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            </details>
+          </>
+        )}
 
-      {pastGroups.length > 0 && (
-        <>
-          <Separator className="my-8" />
-          <details>
-            <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground select-none">
-              Past bookings ({past.length})
-            </summary>
-            <div className="mt-4 space-y-6">
-              {pastGroups.map(([day, dayBookings]) => (
-                <div key={day}>
-                  <h2 className="text-sm font-medium text-muted-foreground mb-3">
-                    {format(new Date(day), "EEEE d MMMM yyyy")}
-                  </h2>
-                  <div className="space-y-2">
-                    {dayBookings.map((b) => (
-                      <BookingRow key={b.id} booking={b} past />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        </>
-      )}
+        {cancelTarget && (
+          <CancelDialog
+            open
+            onClose={() => setCancelTarget(null)}
+            bookingId={cancelTarget.id}
+            roomName={cancelTarget.roomName}
+            roomId={cancelTarget.roomId}
+            onSuccess={load}
+          />
+        )}
 
-      {cancelTarget && (
-        <CancelDialog
-          open
-          onClose={() => setCancelTarget(null)}
-          bookingId={cancelTarget.id}
-          roomName={cancelTarget.roomName}
-          roomId={cancelTarget.roomId}
-          onSuccess={load}
-        />
-      )}
-
-      {cancelRecurringTarget && (
-        <AlertDialog open onOpenChange={(v) => !v && setCancelRecurringTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Cancel all remaining bookings?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will cancel all {cancelRecurringTarget.count} remaining weekly booking{cancelRecurringTarget.count !== 1 ? "s" : ""} for <strong>{cancelRecurringTarget.roomName}</strong>. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={cancellingAll}>Keep bookings</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => handleCancelRemaining(cancelRecurringTarget.groupId)}
-                disabled={cancellingAll}
-              >
-                {cancellingAll ? "Cancelling…" : "Yes, cancel all"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-    </div>
+        {cancelRecurringTarget && (
+          <AlertDialog open onOpenChange={(v) => !v && setCancelRecurringTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel all remaining bookings?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will cancel all {cancelRecurringTarget.count} remaining weekly booking
+                  {cancelRecurringTarget.count !== 1 ? "s" : ""} for{" "}
+                  <strong>{cancelRecurringTarget.roomName}</strong>. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={cancellingAll}>Keep bookings</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => handleCancelRemaining(cancelRecurringTarget.groupId)}
+                  disabled={cancellingAll}
+                >
+                  {cancellingAll ? "Cancelling…" : "Yes, cancel all"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
     </div>
   );
 }
@@ -227,7 +283,9 @@ function BookingRow({
         {!past && (onCancel || onCancelRemaining) && (
           <div className="flex flex-col items-end gap-1 shrink-0">
             {booking.recurringGroupId && (
-              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">Recurring</span>
+              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
+                Recurring
+              </span>
             )}
             <div className="flex gap-2">
               {onCancelRemaining && (
