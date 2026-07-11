@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,15 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
+import { overlaps } from "@/lib/booking/conflicts";
 
 // 08:00 – 20:00 in 15-minute steps
-const TIME_OPTIONS = Array.from({ length: 49 }, (_, i) => {
-  const m = 8 * 60 + i * 15;
-  if (m > 20 * 60) return null;
-  const h = String(Math.floor(m / 60)).padStart(2, "0");
-  const min = String(m % 60).padStart(2, "0");
-  return { value: `${h}:${min}` };
-}).filter(Boolean) as { value: string }[];
+const TIME_OPTIONS = Array.from({ length: 49 }, (_, i) => ({
+  value: minutesToTime(8 * 60 + i * 15),
+}));
 
 /**
  * Convert a date string (YYYY-MM-DD) and local time (HH:mm, Europe/London)
@@ -31,17 +29,9 @@ function toUTC(date: string, time: string): string {
   return new Date(`${date}T${time}:00`).toISOString();
 }
 
-function toMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function toHHMM(minutes: number): string {
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-}
-
-function friendlyDate(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", {
+function friendlyDate(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(`${date}T12:00:00`) : date;
+  return d.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -63,7 +53,7 @@ export interface BookingDialogProps {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateISO();
 }
 
 function minDate(): string {
@@ -71,9 +61,7 @@ function minDate(): string {
 }
 
 function maxDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 90);
-  return d.toISOString().slice(0, 10);
+  return localDateISO(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000));
 }
 
 export default function BookingDialog({
@@ -128,48 +116,60 @@ export default function BookingDialog({
 
   // Inline conflict check — debounced 600ms after time/date changes.
   // On conflict, also look up the room's bookings that day and suggest the
-  // next free slot of the same duration.
+  // next free slot of the same duration. The sequence counter discards
+  // responses from a superseded check so a stale result can't re-set the
+  // warning (which gates the submit button) for a slot the user has left.
+  const checkSeq = useRef(0);
   useEffect(() => {
     if (!open) return;
     setConflictWarning(null);
     setSuggestedSlot(null);
+    const seq = ++checkSeq.current;
     const from = toUTC(selectedDate, startTime);
-    const to = toUTC(selectedDate, endTime);
+    const to = toUTC(isMinibus ? endDate : selectedDate, endTime);
+    if (from >= to) return;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
           `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         );
-        if (!res.ok) return;
+        if (seq !== checkSeq.current || !res.ok) return;
         const data = (await res.json()) as Record<string, { free: boolean }>;
         const info = data[roomId];
         if (!info || info.free) return;
         setConflictWarning("This time slot is already booked.");
 
-        if (isMinibus) return;
+        // Suggestions only for standard rooms: sections, composites and
+        // parking are conflict-checked against the whole room family
+        // server-side, so a scan of this room's own bookings could suggest
+        // a slot the server would reject.
+        if (roomKind !== "STANDARD") return;
         const dayFrom = toUTC(selectedDate, "07:00");
         const dayTo = toUTC(selectedDate, "21:00");
         const bres = await fetch(
           `/api/rooms/${roomId}/bookings?from=${encodeURIComponent(dayFrom)}&to=${encodeURIComponent(dayTo)}`,
         );
-        if (!bres.ok) return;
+        if (seq !== checkSeq.current || !bres.ok) return;
         const busy = ((await bres.json()) as { startUtc: string; endUtc: string }[]).map((b) => ({
-          s: new Date(b.startUtc).getTime(),
-          e: new Date(b.endUtc).getTime(),
+          startUtc: new Date(b.startUtc),
+          endUtc: new Date(b.endUtc),
         }));
 
-        const durMin = toMinutes(endTime) - toMinutes(startTime);
+        const durMin = timeToMinutes(endTime) - timeToMinutes(startTime);
         const lastEnd = 20 * 60; // slots must finish by 20:00
+        const dayBaseMs = new Date(`${selectedDate}T00:00:00`).getTime();
         const nowMs = Date.now();
         for (const t of TIME_OPTIONS) {
           if (t.value <= startTime) continue;
-          const startMin = toMinutes(t.value);
+          const startMin = timeToMinutes(t.value);
           if (startMin + durMin > lastEnd) break;
-          const s = new Date(`${selectedDate}T${t.value}:00`).getTime();
-          if (s < nowMs) continue;
-          const e = s + durMin * 60_000;
-          if (!busy.some((b) => b.s < e && b.e > s)) {
-            setSuggestedSlot({ start: t.value, end: toHHMM(startMin + durMin) });
+          const startMs = dayBaseMs + startMin * 60_000;
+          if (startMs < nowMs) continue;
+          const slot = { startUtc: new Date(startMs), endUtc: new Date(startMs + durMin * 60_000) };
+          if (!busy.some((b) => overlaps(slot, b))) {
+            if (seq === checkSeq.current) {
+              setSuggestedSlot({ start: t.value, end: minutesToTime(startMin + durMin) });
+            }
             break;
           }
         }
@@ -178,7 +178,7 @@ export default function BookingDialog({
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [open, selectedDate, startTime, endTime, roomId, isMinibus]);
+  }, [open, selectedDate, endDate, startTime, endTime, roomId, roomKind, isMinibus]);
 
   // Keep endTime always after startTime (only when start and end are on the same day)
   useEffect(() => {
@@ -217,6 +217,21 @@ export default function BookingDialog({
         ? assistanceNotes.trim() || null
         : null;
 
+    // Multi-day minibus hires end on endDate, not selectedDate
+    const whenLabel =
+      isMinibus && endDate !== selectedDate
+        ? `${friendlyDate(selectedDate)} ${startTime} – ${friendlyDate(endDate)} ${endTime}`
+        : `${friendlyDate(selectedDate)} · ${startTime}–${endTime}`;
+    const toastOptions = (description: string) => ({
+      description,
+      action: {
+        label: "My bookings",
+        onClick: () => {
+          window.location.href = "/bookings";
+        },
+      },
+    });
+
     try {
       let ok = false;
       let errorMsg: string | null = null;
@@ -250,15 +265,7 @@ export default function BookingDialog({
               skippedCount > 0
                 ? `${createdCount} of ${repeatWeeks} bookings created. ${skippedCount} week${skippedCount > 1 ? "s were" : " was"} already taken.`
                 : `${createdCount} weekly booking${createdCount > 1 ? "s" : ""} created.`;
-            toast.success(msg, {
-              description: `${roomName} · ${friendlyDate(selectedDate)} · ${startTime}–${endTime}`,
-              action: {
-                label: "My bookings",
-                onClick: () => {
-                  window.location.href = "/bookings";
-                },
-              },
-            });
+            toast.success(msg, toastOptions(`${roomName} · ${whenLabel}`));
             if (data.aborted)
               toast.warning(
                 "Some weeks could not be created — calendar system temporarily unavailable.",
@@ -282,15 +289,7 @@ export default function BookingDialog({
         });
         if (res.ok) {
           ok = true;
-          toast.success(isParking ? "Bay booked" : `Booked ${roomName}`, {
-            description: `${friendlyDate(selectedDate)} · ${startTime}–${endTime}`,
-            action: {
-              label: "My bookings",
-              onClick: () => {
-                window.location.href = "/bookings";
-              },
-            },
-          });
+          toast.success(isParking ? "Bay booked" : `Booked ${roomName}`, toastOptions(whenLabel));
         } else {
           const data = (await res.json()) as { error?: { message?: string } };
           errorMsg = data.error?.message ?? "Booking failed. Please try again.";
@@ -319,7 +318,7 @@ export default function BookingDialog({
     ? Array.from({ length: repeatWeeks }, (_, i) => {
         const d = new Date(selectedDate + "T12:00:00");
         d.setDate(d.getDate() + i * 7);
-        return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+        return friendlyDate(d);
       })
     : [];
 
@@ -455,6 +454,11 @@ export default function BookingDialog({
                 </span>
                 {conflictWarning}
               </p>
+              {repeatWeekly && (
+                <p className="text-label-sm font-label-sm text-on-surface-variant">
+                  You can still submit the series — weeks that are already booked will be skipped.
+                </p>
+              )}
               {suggestedSlot && (
                 <button
                   type="button"
@@ -632,13 +636,17 @@ export default function BookingDialog({
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
+          {/* A conflict blocks a single booking, but not a weekly series —
+              the server creates the free weeks and reports the skipped ones. */}
           <Button
             onClick={handleSubmit}
-            disabled={submitting || (!isParking && !subject.trim()) || !!conflictWarning}
+            disabled={
+              submitting || (!isParking && !subject.trim()) || (!!conflictWarning && !repeatWeekly)
+            }
           >
             {submitting
               ? "Booking…"
-              : conflictWarning
+              : conflictWarning && !repeatWeekly
                 ? "Time unavailable"
                 : isParking
                   ? "Book a bay"

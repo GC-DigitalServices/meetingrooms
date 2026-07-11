@@ -95,37 +95,34 @@ export default function MyBookingsPage() {
   const upcomingGroups = groupByDay(upcoming);
   const pastGroups = groupByDay(past).reverse();
 
-  if (bookings === null && loadError) {
+  // One page shell for all three states so the header doesn't jump between
+  // error, loading and loaded renders.
+  if (bookings === null) {
     return (
       <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
         <div className="max-w-xl">
           <h1 className="font-display font-extrabold text-headline-xl text-on-background mb-6">
             My Bookings
           </h1>
-          <div className="rounded-xl border border-outline-variant/30 p-6 text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              Couldn&apos;t load your bookings. Check your connection and try again.
-            </p>
-            <button
-              onClick={() => void load()}
-              className="px-4 py-2 text-sm rounded-full bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
-            >
-              Try again
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (bookings === null) {
-    return (
-      <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
-        <div className="max-w-xl space-y-4">
-          <Skeleton className="h-6 w-48" />
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-lg" />
-          ))}
+          {loadError ? (
+            <div className="rounded-xl border border-outline-variant/30 p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                Couldn&apos;t load your bookings. Check your connection and try again.
+              </p>
+              <button
+                onClick={() => void load()}
+                className="px-4 py-2 text-sm rounded-full bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 rounded-lg" />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

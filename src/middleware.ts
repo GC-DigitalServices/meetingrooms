@@ -4,15 +4,17 @@ import { NextRequest, NextResponse } from "next/server";
 // API routes that use device-token auth handle auth in the route handler.
 const PUBLIC_PREFIXES = [
   "/sign-in",
-  "/terms",          // ToU page — auth checked inside the page, not via session cookie redirect
+  "/terms", // ToU page — auth checked inside the page, not via session cookie redirect
   "/api/auth/",
   "/api/health",
   "/api/qr",
-  "/api/devices/",   // device-auth'd routes handle their own auth
-  "/api/webhooks/",  // Graph validation requests arrive with no session cookie
-  "/display",        // device-token auth, no session cookie
+  "/api/devices/", // device-auth'd routes handle their own auth
+  "/api/webhooks/", // Graph validation requests arrive with no session cookie
+  "/display", // device-token auth, no session cookie
   "/_next/",
   "/favicon.ico",
+  "/portal.webmanifest", // browsers fetch the manifest without cookies
+  "/icons/", // manifest icons — same cookieless fetch
 ];
 
 // ---------------------------------------------------------------------------
@@ -75,10 +77,7 @@ export function middleware(req: NextRequest): NextResponse {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=()",
-  );
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   // HSTS — only in production (TLS is terminated upstream by the platform).
   // Avoid sending it over plain-HTTP local dev where it would pin localhost.
   if (process.env.NODE_ENV === "production") {

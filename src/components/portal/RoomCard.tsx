@@ -4,32 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import BookingDialog from "./BookingDialog";
 import { computeRoomStatus } from "@/lib/booking/status";
+import { localTime, localDateISO, timeToMinutes } from "@/lib/utils";
 import type { BookingSlot } from "@/hooks/useRoomLive";
-
-function fmtTime(iso: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/London",
-  }).format(new Date(iso));
-}
-
-function toLocalDate(iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(iso));
-}
 
 // Minutes since midnight, Europe/London
 function londonMinutes(iso: string): number {
-  const [h, m] = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-    .format(new Date(iso))
-    .split(":")
-    .map(Number);
-  return h * 60 + m;
+  return timeToMinutes(localTime(iso));
 }
 
 const STRIP_START = 7 * 60; // 07:00
@@ -39,10 +19,10 @@ const STRIP_SPAN = STRIP_END - STRIP_START;
 /** Thin bar showing when the room is booked between 07:00 and 21:00 on one day. */
 function AvailabilityStrip({ bookings, date }: { bookings: BookingSlot[]; date: string }) {
   const segments = bookings
-    .filter((b) => toLocalDate(b.startUtc) <= date && toLocalDate(b.endUtc) >= date)
+    .filter((b) => localDateISO(b.startUtc) <= date && localDateISO(b.endUtc) >= date)
     .map((b) => {
-      const start = toLocalDate(b.startUtc) === date ? londonMinutes(b.startUtc) : STRIP_START;
-      const end = toLocalDate(b.endUtc) === date ? londonMinutes(b.endUtc) : STRIP_END;
+      const start = localDateISO(b.startUtc) === date ? londonMinutes(b.startUtc) : STRIP_START;
+      const end = localDateISO(b.endUtc) === date ? londonMinutes(b.endUtc) : STRIP_END;
       return { id: b.id, start, end };
     })
     .filter((s) => s.end > STRIP_START && s.start < STRIP_END)
@@ -148,11 +128,13 @@ export default function RoomCard({
   const status = computeRoomStatus(bookings);
   const badge = STATUS_BADGE[status] ?? STATUS_BADGE.free;
 
-  const scheduleDate =
-    filterDate ??
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
+  const scheduleDate = filterDate ?? localDateISO();
+
+  // The grid only loads bookings for roughly the next 48 hours, so the strip
+  // would falsely read "all free" for dates beyond tomorrow — hide it there.
+  const stripHasData = scheduleDate <= localDateISO(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const todayBookings = bookings
-    .filter((b) => toLocalDate(b.startUtc) === scheduleDate)
+    .filter((b) => localDateISO(b.startUtc) === scheduleDate)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
   const buildingIcon =
@@ -247,7 +229,9 @@ export default function RoomCard({
             </p>
           )}
 
-          {room.kind !== "PARKING" && <AvailabilityStrip bookings={bookings} date={scheduleDate} />}
+          {room.kind !== "PARKING" && stripHasData && (
+            <AvailabilityStrip bookings={bookings} date={scheduleDate} />
+          )}
 
           <div className="flex flex-wrap gap-4 mb-4 text-on-surface-variant">
             <div className="flex items-center gap-1 text-sm">
@@ -303,7 +287,7 @@ export default function RoomCard({
                 todayBookings.map((b) => (
                   <div key={b.id} className="flex items-baseline justify-between text-xs">
                     <span className="text-on-surface-variant whitespace-nowrap">
-                      {fmtTime(b.startUtc)}–{fmtTime(b.endUtc)}
+                      {localTime(b.startUtc)}–{localTime(b.endUtc)}
                     </span>
                     {b.visibility === "full" && b.subject && (
                       <span className="ml-2 truncate text-on-surface max-w-[130px]">

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useReducer, useState, useCallback } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
 import RoomCard from "./RoomCard";
 import { computeRoomStatus } from "@/lib/booking/status";
 import { useSocket } from "@/lib/socket-context";
-import { localTime } from "@/lib/utils";
+import { localTime, localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 import type { RoomAvailability } from "@/app/api/availability/route";
 
@@ -65,40 +65,44 @@ function buildInitialMap(bookings: BookingSlot[]): BookingsMap {
   return map;
 }
 
-function toLondonDate(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
-}
-
 function todayStr() {
-  return toLondonDate(new Date());
+  return localDateISO();
 }
 
 function nextQuarterHour() {
   const d = new Date();
   const m = Math.ceil(d.getMinutes() / 15) * 15;
   const totalMin = (d.getHours() + Math.floor(m / 60)) * 60 + (m % 60);
-  const clamped = Math.max(7 * 60, Math.min(20 * 60, totalMin));
-  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+  return minutesToTime(Math.max(7 * 60, Math.min(20 * 60, totalMin)));
+}
+
+// Both clamp to the end of bookable hours (21:00) so filterTo stays a valid option.
+function addMinutes(time: string, mins: number) {
+  return minutesToTime(Math.min(timeToMinutes(time) + mins, 21 * 60));
 }
 
 function addHours(time: string, h: number) {
-  const [hh, mm] = time.split(":").map(Number);
-  const total = hh + h;
-  return `${String(total % 24).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  return addMinutes(time, h * 60);
 }
 
-function addMinutes(time: string, mins: number) {
-  const [hh, mm] = time.split(":").map(Number);
-  const total = Math.min(hh * 60 + mm + mins, 21 * 60);
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+// 07:00 – 21:00 in 15-minute steps
+const TIME_OPTIONS = Array.from({ length: 57 }, (_, i) => minutesToTime(7 * 60 + i * 15));
+
+// Shared look for the small filter chips (building, duration quick-picks).
+function chipClass(active: boolean) {
+  return `px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
+    active
+      ? "border-primary bg-primary text-on-primary font-semibold"
+      : "border-outline-variant hover:border-primary text-on-surface-variant"
+  }`;
 }
 
 function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
-  const today = toLondonDate(now);
+  const today = localDateISO(now);
   const next = bookings
     .filter((b) => new Date(b.startUtc) > now)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
-  if (!next || toLondonDate(new Date(next.startUtc)) !== today) return "Free all day";
+  if (!next || localDateISO(next.startUtc) !== today) return "Free all day";
   return `Free until ${localTime(next.startUtc)}`;
 }
 
@@ -183,6 +187,10 @@ export default function RoomGrid({
         dispatch({ type: "UPDATE", booking: p.booking as BookingSlot });
       else if (msg.type === "booking.deleted")
         dispatch({ type: "DELETE", roomId: p.roomId as string, bookingId: p.bookingId as string });
+
+      // Bookings changed elsewhere — refresh the availability that drives the
+      // "Show only available" filter and the free count, or they go stale.
+      if (msg.type.startsWith("booking.")) void fetchAvailabilityRef.current();
     }
 
     socket.on("message", onMessage);
@@ -193,7 +201,11 @@ export default function RoomGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
+  // Sequence counter so an out-of-order response for an older filter window
+  // can't overwrite results (or the loading flag) of a newer request.
+  const availSeq = useRef(0);
   const fetchAvailability = useCallback(async () => {
+    const seq = ++availSeq.current;
     setAvailLoading(true);
     try {
       const from = new Date(`${filterDate}T${filterFrom}:00`).toISOString();
@@ -201,11 +213,13 @@ export default function RoomGrid({
       const res = await fetch(
         `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       );
-      if (res.ok) setAvail((await res.json()) as Record<string, RoomAvailability>);
+      if (res.ok && seq === availSeq.current) {
+        setAvail((await res.json()) as Record<string, RoomAvailability>);
+      }
     } catch {
       /* ignore transient fetch errors */
     } finally {
-      setAvailLoading(false);
+      if (seq === availSeq.current) setAvailLoading(false);
     }
   }, [filterDate, filterFrom, filterTo]);
 
@@ -213,15 +227,27 @@ export default function RoomGrid({
     void fetchAvailability();
   }, [fetchAvailability]);
 
+  // Latest fetcher for the socket handler, which subscribes once per socket.
+  const fetchAvailabilityRef = useRef(fetchAvailability);
   useEffect(() => {
-    if (filterTo <= filterFrom) setFilterTo(addHours(filterFrom, 1));
+    fetchAvailabilityRef.current = fetchAvailability;
+  }, [fetchAvailability]);
+
+  // Keep filterTo a valid option strictly after filterFrom (aim for +1 hour).
+  useEffect(() => {
+    if (filterTo > filterFrom) return;
+    const later = TIME_OPTIONS.filter((t) => t > filterFrom);
+    if (later.length === 0) return;
+    const target = addHours(filterFrom, 1);
+    setFilterTo(later.find((t) => t >= target) ?? later[later.length - 1]);
   }, [filterFrom, filterTo]);
 
   const now = new Date();
 
-  const buildings = [
-    ...new Set(rooms.map((r) => r.building).filter((b): b is string => !!b)),
-  ].sort();
+  const buildings = useMemo(
+    () => [...new Set(rooms.map((r) => r.building).filter((b): b is string => !!b))].sort(),
+    [rooms],
+  );
 
   const searchLower = search.trim().toLowerCase();
   const hasActiveFilters = searchLower !== "" || building !== null || minCapacity > 0 || onlyFree;
@@ -260,14 +286,6 @@ export default function RoomGrid({
     });
 
   const freeCount = filtered.filter((r) => avail[r.id]?.free !== false).length;
-
-  const TIME_OPTIONS = Array.from({ length: 57 }, (_, i) => {
-    const m = 7 * 60 + i * 15;
-    if (m > 21 * 60) return null;
-    const h = String(Math.floor(m / 60)).padStart(2, "0");
-    const min = String(m % 60).padStart(2, "0");
-    return `${h}:${min}`;
-  }).filter(Boolean) as string[];
 
   const dateLabel =
     filterDate === todayStr()
@@ -338,29 +356,14 @@ export default function RoomGrid({
                   Building
                 </label>
                 <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => setBuilding(null)}
-                    aria-pressed={building === null}
-                    className={`px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
-                      building === null
-                        ? "border-primary bg-primary text-on-primary font-semibold"
-                        : "border-outline-variant hover:border-primary text-on-surface-variant"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {buildings.map((b) => (
+                  {[null, ...buildings].map((b) => (
                     <button
-                      key={b}
-                      onClick={() => setBuilding((prev) => (prev === b ? null : b))}
+                      key={b ?? "all"}
+                      onClick={() => setBuilding(b)}
                       aria-pressed={building === b}
-                      className={`px-2.5 py-1.5 text-xs rounded-full border transition-colors ${
-                        building === b
-                          ? "border-primary bg-primary text-on-primary font-semibold"
-                          : "border-outline-variant hover:border-primary text-on-surface-variant"
-                      }`}
+                      className={chipClass(building === b)}
                     >
-                      {b}
+                      {b ?? "All"}
                     </button>
                   ))}
                 </div>
@@ -394,7 +397,8 @@ export default function RoomGrid({
                     value={filterFrom}
                     onChange={(e) => setFilterFrom(e.target.value)}
                   >
-                    {TIME_OPTIONS.map((t) => (
+                    {/* Exclude the last slot — a From of 21:00 leaves no valid To */}
+                    {TIME_OPTIONS.slice(0, -1).map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -425,7 +429,7 @@ export default function RoomGrid({
                     setFilterFrom(from);
                     setFilterTo(addHours(from, 1));
                   }}
-                  className="px-2.5 py-1 text-xs rounded-full border border-outline-variant hover:border-primary text-on-surface-variant transition-colors"
+                  className={chipClass(false)}
                 >
                   Now
                 </button>
@@ -433,20 +437,19 @@ export default function RoomGrid({
                   { label: "30 min", mins: 30 },
                   { label: "1 hour", mins: 60 },
                   { label: "2 hours", mins: 120 },
-                ].map(({ label, mins }) => (
-                  <button
-                    key={mins}
-                    onClick={() => setFilterTo(addMinutes(filterFrom, mins))}
-                    aria-pressed={filterTo === addMinutes(filterFrom, mins)}
-                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                      filterTo === addMinutes(filterFrom, mins)
-                        ? "border-primary bg-primary text-on-primary font-semibold"
-                        : "border-outline-variant hover:border-primary text-on-surface-variant"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                ].map(({ label, mins }) => {
+                  const to = addMinutes(filterFrom, mins);
+                  return (
+                    <button
+                      key={mins}
+                      onClick={() => setFilterTo(to)}
+                      aria-pressed={filterTo === to}
+                      className={chipClass(filterTo === to)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -464,7 +467,9 @@ export default function RoomGrid({
                 />
                 <span className="text-sm text-on-surface">Show only available</span>
               </label>
-              {!isStaff && !isAdmin && (
+              {/* Admins already see everything; everyone else (staff included —
+                  their permissions can be misconfigured) gets the toggle. */}
+              {!isAdmin && (
                 <label className="flex items-center gap-3 cursor-pointer mt-2">
                   <input
                     type="checkbox"
@@ -556,7 +561,7 @@ export default function RoomGrid({
                     Clear filters
                   </button>
                 )}
-                {!isStaff && !isAdmin && !showAll && rooms.some((r) => !permitted.has(r.id)) && (
+                {!isAdmin && !showAll && rooms.some((r) => !permitted.has(r.id)) && (
                   <button
                     onClick={() => setShowAll(true)}
                     className="px-4 py-2 text-sm rounded-full bg-primary text-on-primary font-semibold hover:bg-primary-container transition-colors"

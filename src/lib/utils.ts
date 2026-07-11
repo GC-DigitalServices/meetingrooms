@@ -5,22 +5,46 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Module-level formatter instances — Intl.DateTimeFormat construction is
+// expensive and these helpers run per booking per card per render.
+const LONDON_TIME_FMT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+const LONDON_DATE_FMT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+const LONDON_DATE_ISO_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" });
+
 /** Format a UTC Date as HH:mm in Europe/London. */
 export function localTime(date: Date | string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(typeof date === "string" ? new Date(date) : date);
+  return LONDON_TIME_FMT.format(typeof date === "string" ? new Date(date) : date);
 }
 
 /** Format a UTC Date as "1 Jun 2026" in Europe/London. */
 export function localDate(date: Date | string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(typeof date === "string" ? new Date(date) : date);
+  return LONDON_DATE_FMT.format(typeof date === "string" ? new Date(date) : date);
+}
+
+/** Format a UTC Date as YYYY-MM-DD in Europe/London. Defaults to now. */
+export function localDateISO(date: Date | string = new Date()): string {
+  return LONDON_DATE_ISO_FMT.format(typeof date === "string" ? new Date(date) : date);
+}
+
+/** "HH:mm" → minutes since midnight. */
+export function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Minutes since midnight → "HH:mm". */
+export function minutesToTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
