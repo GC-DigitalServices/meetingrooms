@@ -4,7 +4,8 @@ import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "r
 import RoomCard from "./RoomCard";
 import { computeRoomStatus } from "@/lib/booking/status";
 import { useSocket } from "@/lib/socket-context";
-import { localTime, localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
+import { localDateISO, timeToMinutes, minutesToTime, localTime } from "@/lib/utils";
+import { freeUntilLabel, busyUntilLabel, bookedAtLabel } from "@/lib/booking/labels";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 import type { RoomAvailability } from "@/app/api/availability/route";
 
@@ -95,28 +96,6 @@ function chipClass(active: boolean) {
       ? "border-primary bg-primary text-on-primary font-semibold"
       : "border-outline-variant hover:border-primary text-on-surface-variant"
   }`;
-}
-
-function freeUntilLabel(bookings: BookingSlot[], now: Date): string {
-  const today = localDateISO(now);
-  const next = bookings
-    .filter((b) => new Date(b.startUtc) > now)
-    .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
-  if (!next || localDateISO(next.startUtc) !== today) return "Free all day";
-  return `Free until ${localTime(next.startUtc)}`;
-}
-
-function busyUntilLabel(bookings: BookingSlot[], now: Date): string {
-  const current = bookings.find((b) => new Date(b.startUtc) <= now && new Date(b.endUtc) > now);
-  return current ? `Busy until ${localTime(current.endUtc)}` : "";
-}
-
-function bookedAtLabel(bookings: BookingSlot[], now: Date): string {
-  const soon = new Date(now.getTime() + 30 * 60 * 1000);
-  const next = bookings
-    .filter((b) => new Date(b.startUtc) > now && new Date(b.startUtc) <= soon)
-    .sort((a, b) => a.startUtc.localeCompare(b.startUtc))[0];
-  return next ? `Booked at ${localTime(next.startUtc)}` : "";
 }
 
 export default function RoomGrid({
@@ -259,20 +238,23 @@ export default function RoomGrid({
     setOnlyFree(false);
   }
 
+  // All filters except availability — split out so the empty state can tell
+  // "everything is busy" apart from "nothing matches".
+  function matchesStaticFilters(r: Room): boolean {
+    if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
+    if (
+      searchLower &&
+      !r.displayName.toLowerCase().includes(searchLower) &&
+      !(r.building ?? "").toLowerCase().includes(searchLower)
+    )
+      return false;
+    if (building && r.building !== building) return false;
+    if (r.capacity < minCapacity) return false;
+    return true;
+  }
+
   const filtered = rooms
-    .filter((r) => {
-      if (!isAdmin && !showAll && !permitted.has(r.id)) return false;
-      if (
-        searchLower &&
-        !r.displayName.toLowerCase().includes(searchLower) &&
-        !(r.building ?? "").toLowerCase().includes(searchLower)
-      )
-        return false;
-      if (building && r.building !== building) return false;
-      if (r.capacity < minCapacity) return false;
-      if (onlyFree && avail[r.id] && !avail[r.id].free) return false;
-      return true;
-    })
+    .filter((r) => matchesStaticFilters(r) && (!onlyFree || !avail[r.id] || avail[r.id].free))
     .sort((a, b) => {
       const afav = favourites.has(a.id);
       const bfav = favourites.has(b.id);
@@ -285,7 +267,37 @@ export default function RoomGrid({
       return a.displayName.localeCompare(b.displayName);
     });
 
+  const favRooms = filtered.filter((r) => favourites.has(r.id));
+  const otherRooms = filtered.filter((r) => !favourites.has(r.id));
+
   const freeCount = filtered.filter((r) => avail[r.id]?.free !== false).length;
+
+  // When "show only available" hides everything, work out when the first
+  // matching room frees up (bookings are only loaded ~48h out, so only for
+  // today/tomorrow) and offer to move the search to that time.
+  const busyHidden = filtered.length === 0 && onlyFree ? rooms.filter(matchesStaticFilters) : [];
+  const freesUpAt: string | null = (() => {
+    if (
+      busyHidden.length === 0 ||
+      filterDate > localDateISO(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    )
+      return null;
+    const windowStart = new Date(`${filterDate}T${filterFrom}:00`);
+    const windowEnd = new Date(`${filterDate}T${filterTo}:00`);
+    const ends = busyHidden.flatMap((r) =>
+      (bookingsMap[r.id] ?? [])
+        .filter((b) => new Date(b.startUtc) < windowEnd && new Date(b.endUtc) > windowStart)
+        .map((b) => b.endUtc),
+    );
+    if (ends.length === 0) return null;
+    const earliest = ends.sort()[0];
+    if (localDateISO(earliest) !== filterDate) return null;
+    // Round up to the next quarter hour; only offer times a booking can start at
+    const rounded = minutesToTime(
+      Math.min(Math.ceil(timeToMinutes(localTime(earliest)) / 15) * 15, 20 * 60),
+    );
+    return rounded < "20:00" ? rounded : null;
+  })();
 
   const dateLabel =
     filterDate === todayStr()
@@ -550,9 +562,19 @@ export default function RoomGrid({
               <p className="text-on-surface-variant">
                 {!isAdmin && !showAll && permittedRoomIds.length === 0
                   ? "You don't have booking access to any rooms right now."
-                  : "No meeting rooms match your filters."}
+                  : busyHidden.length > 0
+                    ? `All ${busyHidden.length} matching room${busyHidden.length !== 1 ? "s are" : " is"} booked for this time.`
+                    : "No meeting rooms match your filters."}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {freesUpAt && (
+                  <button
+                    onClick={() => setFilterFrom(freesUpAt)}
+                    className="px-4 py-2 text-sm rounded-full bg-primary text-on-primary font-semibold hover:bg-primary-container transition-colors"
+                  >
+                    Try from {freesUpAt} — the first room frees up then
+                  </button>
+                )}
                 {hasActiveFilters && (
                   <button
                     onClick={clearFilters}
@@ -572,8 +594,8 @@ export default function RoomGrid({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter">
-              {filtered.map((room) => {
+            (() => {
+              const renderCard = (room: Room) => {
                 const bk = bookingsMap[room.id] ?? [];
                 const status = computeRoomStatus(bk, now);
                 const nextLabel =
@@ -608,8 +630,36 @@ export default function RoomGrid({
                     freeBayCount={freeBayCount}
                   />
                 );
-              })}
-            </div>
+              };
+
+              const grid = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter";
+              const heading = (icon: string, text: string) => (
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    {icon}
+                  </span>
+                  {text}
+                </h3>
+              );
+
+              // Favourited rooms get their own labelled section
+              return favRooms.length > 0 ? (
+                <>
+                  <section className="mb-8">
+                    {heading("star", "Favourites")}
+                    <div className={grid}>{favRooms.map(renderCard)}</div>
+                  </section>
+                  {otherRooms.length > 0 && (
+                    <section>
+                      {heading("meeting_room", "All rooms")}
+                      <div className={grid}>{otherRooms.map(renderCard)}</div>
+                    </section>
+                  )}
+                </>
+              ) : (
+                <div className={grid}>{filtered.map(renderCard)}</div>
+              );
+            })()
           )}
 
           {/* Footer */}

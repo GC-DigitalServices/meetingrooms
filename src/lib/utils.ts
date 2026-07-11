@@ -48,3 +48,20 @@ export function timeToMinutes(time: string): number {
 export function minutesToTime(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
+
+const LONDON_HOUR_FMT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  hour: "2-digit",
+  hour12: false,
+});
+
+/**
+ * UTC instant of midnight in Europe/London on the given YYYY-MM-DD date.
+ * London is UTC+0 or UTC+1, so UTC midnight renders there as either 00:00
+ * or 01:00 — subtracting that wall-clock hour lands exactly on local midnight.
+ */
+export function londonDayStartUtc(date: string): Date {
+  const utcMidnight = new Date(`${date}T00:00:00Z`);
+  const hour = Number(LONDON_HOUR_FMT.format(utcMidnight)) % 24;
+  return new Date(utcMidnight.getTime() - hour * 60 * 60 * 1000);
+}

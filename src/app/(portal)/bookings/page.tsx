@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format, isAfter, isBefore } from "date-fns";
-import { MapPin, Clock } from "lucide-react";
+import { MapPin, Clock, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -27,6 +27,46 @@ interface BookingRow {
   endUtc: string;
   recurringGroupId: string | null;
   room: { id: string; displayName: string; building: string | null };
+}
+
+// The portal is the only system that can write to room calendars, so give
+// users a standards-based way to get the booking into their own calendar.
+function icsEscape(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/[,;]/g, (c) => `\\${c}`)
+    .replace(/\n/g, "\\n");
+}
+
+function icsTimestamp(iso: string): string {
+  return new Date(iso)
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
+}
+
+function downloadIcs(b: BookingRow) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Greenhead College//Room Booking//EN",
+    "BEGIN:VEVENT",
+    `UID:${b.id}@meetingrooms.greenhead.ac.uk`,
+    `DTSTAMP:${icsTimestamp(new Date().toISOString())}`,
+    `DTSTART:${icsTimestamp(b.startUtc)}`,
+    `DTEND:${icsTimestamp(b.endUtc)}`,
+    `SUMMARY:${icsEscape(b.subject || `Room booking — ${b.room.displayName}`)}`,
+    `LOCATION:${icsEscape([b.room.displayName, b.room.building].filter(Boolean).join(", "))}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/calendar" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `booking-${b.startUtc.slice(0, 10)}.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function groupByDay(bookings: BookingRow[]): [string, BookingRow[]][] {
@@ -277,14 +317,22 @@ function BookingRow({
             </span>
           </div>
         </div>
-        {!past && (onCancel || onCancelRemaining) && (
+        {!past && (
           <div className="flex flex-col items-end gap-1 shrink-0">
             {booking.recurringGroupId && (
               <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
                 Recurring
               </span>
             )}
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => downloadIcs(booking)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+                title="Download an .ics file to add this booking to your own calendar"
+              >
+                <CalendarPlus className="h-3 w-3" aria-hidden="true" />
+                Add to calendar
+              </button>
               {onCancelRemaining && (
                 <button
                   onClick={onCancelRemaining}
