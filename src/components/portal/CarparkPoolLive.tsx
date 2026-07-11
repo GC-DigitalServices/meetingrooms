@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { useSocket } from "@/lib/socket-context";
 import { ParkingBookButton } from "./ParkingBookButton";
 import { localTime } from "@/lib/utils";
@@ -35,7 +35,11 @@ function reducer(state: PoolBooking[], action: Action): PoolBooking[] {
     case "ADD":
       return state.some((b) => b.id === action.booking.id) ? state : [...state, action.booking];
     case "UPDATE":
-      return state.map((b) => (b.id === action.booking.id ? action.booking : b));
+      // Upsert: a booking rescheduled INTO the viewed day arrives as an
+      // update for an id we've never seen.
+      return state.some((b) => b.id === action.booking.id)
+        ? state.map((b) => (b.id === action.booking.id ? action.booking : b))
+        : [...state, action.booking];
     case "DELETE":
       return state.filter((b) => b.id !== action.bookingId);
   }
@@ -104,36 +108,46 @@ export default function CarparkPoolLive({
   const nowMs = Date.now();
   const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000;
 
-  // Only bookings that touch the selected day (events can bring in others)
-  const dayRelevant = bookings.filter(
-    (b) => new Date(b.startUtc).getTime() < dayEndMs && new Date(b.endUtc).getTime() > dayStartMs,
+  // Parse ISO strings once per bookings change, not per slot per render —
+  // this component re-renders every minute and on every socket event
+  const timed = useMemo(
+    () =>
+      bookings.map((b) => ({
+        booking: b,
+        startMs: new Date(b.startUtc).getTime(),
+        endMs: new Date(b.endUtc).getTime(),
+      })),
+    [bookings],
   );
 
+  // Slot boundaries and labels are fixed for the day
+  const slotDefs = useMemo(
+    () =>
+      Array.from({ length: (20 - 7) * 2 }, (_, i) => {
+        const startMs = dayStartMs + (7 * 60 + i * 30) * 60 * 1000;
+        return { startMs, endMs: startMs + 30 * 60 * 1000, time: localTime(new Date(startMs)) };
+      }),
+    [dayStartMs],
+  );
+
+  // Only bookings that touch the selected day (events can bring in others)
+  const dayRelevant = timed.filter((t) => t.startMs < dayEndMs && t.endMs > dayStartMs);
+
   const bookedNow = isToday
-    ? dayRelevant.filter(
-        (b) => new Date(b.startUtc).getTime() <= nowMs && new Date(b.endUtc).getTime() > nowMs,
-      ).length
+    ? dayRelevant.filter((t) => t.startMs <= nowMs && t.endMs > nowMs).length
     : 0;
   const freeNow = totalBays - bookedNow;
 
   const dayBookings = dayRelevant
-    .filter((b) => new Date(b.startUtc).getTime() >= dayStartMs)
-    .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
+    .filter((t) => t.startMs >= dayStartMs)
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((t) => t.booking);
 
   // 30-minute slots, 07:00–20:00 London
-  const slots: { time: string; free: number; isPast: boolean }[] = [];
-  for (let m = 7 * 60; m < 20 * 60; m += 30) {
-    const slotStart = dayStartMs + m * 60 * 1000;
-    const slotEnd = slotStart + 30 * 60 * 1000;
-    const booked = dayRelevant.filter(
-      (b) => new Date(b.startUtc).getTime() < slotEnd && new Date(b.endUtc).getTime() > slotStart,
-    ).length;
-    slots.push({
-      time: localTime(new Date(slotStart)),
-      free: totalBays - booked,
-      isPast: isToday && slotEnd < nowMs,
-    });
-  }
+  const slots = slotDefs.map(({ startMs, endMs, time }) => {
+    const booked = dayRelevant.filter((t) => t.startMs < endMs && t.endMs > startMs).length;
+    return { time, free: totalBays - booked, isPast: isToday && endMs < nowMs };
+  });
 
   return (
     <section>

@@ -14,11 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
 import { overlaps } from "@/lib/booking/conflicts";
+import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "@/lib/booking/hours";
 
-// 08:00 – 20:00 in 15-minute steps
-const TIME_OPTIONS = Array.from({ length: 49 }, (_, i) => ({
-  value: minutesToTime(8 * 60 + i * 15),
-}));
+// Bookable hours in booking-slot steps (08:00 – 20:00 in 15-minute steps)
+const TIME_OPTIONS = Array.from(
+  { length: (BOOKABLE_END_MIN - BOOKABLE_START_MIN) / SLOT_STEP_MIN + 1 },
+  (_, i) => ({ value: minutesToTime(BOOKABLE_START_MIN + i * SLOT_STEP_MIN) }),
+);
 
 /**
  * Convert a date string (YYYY-MM-DD) and local time (HH:mm, Europe/London)
@@ -156,7 +158,7 @@ export default function BookingDialog({
         }));
 
         const durMin = timeToMinutes(endTime) - timeToMinutes(startTime);
-        const lastEnd = 20 * 60; // slots must finish by 20:00
+        const lastEnd = BOOKABLE_END_MIN; // slots must finish inside bookable hours
         const dayBaseMs = new Date(`${selectedDate}T00:00:00`).getTime();
         const nowMs = Date.now();
         for (const t of TIME_OPTIONS) {

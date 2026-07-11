@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import BookingDialog from "./BookingDialog";
 import { computeRoomStatus } from "@/lib/booking/status";
+import { STATUS_META } from "./statusMeta";
 import { localTime, localDateISO, timeToMinutes } from "@/lib/utils";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
@@ -105,12 +106,6 @@ const KIND_ICON: Record<string, string> = {
   PARKING: "local_parking",
 };
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  free: { label: "Available", className: "bg-green-100 text-green-800" },
-  busy: { label: "Busy", className: "bg-red-100 text-red-700" },
-  soon: { label: "Soon", className: "bg-amber-100 text-amber-700" },
-};
-
 export default function RoomCard({
   room,
   bookings,
@@ -126,7 +121,7 @@ export default function RoomCard({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
   const status = computeRoomStatus(bookings);
-  const badge = STATUS_BADGE[status] ?? STATUS_BADGE.free;
+  const badge = STATUS_META[status];
 
   const scheduleDate = filterDate ?? localDateISO();
 

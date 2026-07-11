@@ -12,9 +12,12 @@ import {
   bookedAtLabel,
   findNextFreeSlot,
 } from "@/lib/booking/labels";
+import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "@/lib/booking/hours";
+import { STATUS_META } from "./statusMeta";
 import { localTime, localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
+// View window — wider than bookable hours so early/late bookings still show
 const DAY_START = 7 * 60; // 07:00 in minutes from midnight
 const DAY_END = 22 * 60; // 22:00
 const TOTAL_MIN = DAY_END - DAY_START;
@@ -25,12 +28,6 @@ function minToY(totalMinutes: number): number {
 }
 
 const TOTAL_H = TOTAL_MIN * PX_PER_MIN; // 720px
-
-const STATUS_PILL: Record<string, { label: string; className: string }> = {
-  free: { label: "Available", className: "bg-green-100 text-green-800" },
-  busy: { label: "Busy", className: "bg-red-100 text-red-700" },
-  soon: { label: "Booked soon", className: "bg-amber-100 text-amber-700" },
-};
 
 interface Room {
   id: string;
@@ -75,13 +72,17 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDay]);
 
+  // Overlap test, not start-date equality — multi-day bookings (minibus
+  // hires) must render on every day they span
   const dayBookings = bookings
-    .filter((b) => localDateISO(b.startUtc) === activeDayStr)
+    .filter(
+      (b) => localDateISO(b.startUtc) <= activeDayStr && localDateISO(b.endUtc) >= activeDayStr,
+    )
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
   // Live status (about right now) + one-tap booking of the day's next free hour
   const status = computeRoomStatus(bookings, now);
-  const pill = STATUS_PILL[status] ?? STATUS_PILL.free;
+  const pill = STATUS_META[status];
   const statusDetail =
     status === "busy"
       ? busyUntilLabel(bookings, now)
@@ -90,21 +91,33 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
         : freeUntilLabel(bookings, now);
   const nextFree = canBook ? findNextFreeSlot(dayBookings, activeDayStr, 60) : null;
 
+  // Cached on pointerdown: pointer capture pins the grid for the whole drag,
+  // so re-reading getBoundingClientRect on every pointermove (a potential
+  // forced reflow) is wasted work.
+  const gridRect = useRef<DOMRect | null>(null);
+
   function eventMinute(e: React.PointerEvent<HTMLDivElement>): number {
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = gridRect.current ?? e.currentTarget.getBoundingClientRect();
     const raw = (e.clientY - rect.top) / PX_PER_MIN + DAY_START;
-    const snapped = Math.round(raw / 15) * 15;
+    const snapped = Math.round(raw / SLOT_STEP_MIN) * SLOT_STEP_MIN;
     return Math.max(DAY_START, Math.min(DAY_END, snapped));
   }
 
+  // Clamp to BOOKABLE hours, not the view window — BookingDialog's time
+  // selects only offer 08:00–20:00, and passing values outside that range
+  // desyncs the select display from the submitted state.
   function openSlot(startMin: number, endMin: number) {
-    const start = Math.max(DAY_START, Math.min(DAY_END - 30, startMin));
-    const end = Math.min(DAY_END, Math.max(endMin, start + 30));
+    const start = Math.max(
+      BOOKABLE_START_MIN,
+      Math.min(BOOKABLE_END_MIN - SLOT_STEP_MIN, startMin),
+    );
+    const end = Math.min(BOOKABLE_END_MIN, Math.max(endMin, start + SLOT_STEP_MIN));
     setBookingSlot({ date: activeDayStr, start: minutesToTime(start), end: minutesToTime(end) });
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!canBook) return;
+    gridRect.current = e.currentTarget.getBoundingClientRect();
     const m = eventMinute(e);
     if (e.pointerType === "mouse") {
       if (e.button !== 0) return;
@@ -129,8 +142,9 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
       setDrag(null);
       const from = Math.min(drag.anchor, drag.end);
       const to = Math.max(drag.anchor, drag.end);
-      // A plain click (no meaningful drag) books the classic one-hour slot
-      if (to - from < 30) openSlot(from, from + 60);
+      // Same threshold as the selection overlay: any visible selection is
+      // honoured; a plain click books the classic one-hour slot
+      if (to - from < SLOT_STEP_MIN) openSlot(from, from + 60);
       else openSlot(from, to);
     } else if (tapAnchor.current !== null) {
       const m = tapAnchor.current;
@@ -244,10 +258,15 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
 
             {/* Booking blocks */}
             {dayBookings.map((b) => {
-              const startM = timeToMinutes(localTime(b.startUtc));
+              // Bookings spanning midnight fill from/to the edge of the day
+              const startM =
+                localDateISO(b.startUtc) < activeDayStr
+                  ? DAY_START
+                  : timeToMinutes(localTime(b.startUtc));
               const endRaw = timeToMinutes(localTime(b.endUtc));
               // A booking ending at exactly midnight reads as 0 minutes
-              const endM = endRaw === 0 ? DAY_END : endRaw;
+              const endM =
+                localDateISO(b.endUtc) > activeDayStr ? DAY_END : endRaw === 0 ? DAY_END : endRaw;
               const top = minToY(Math.max(startM, DAY_START));
               const height = Math.max(20, minToY(Math.min(endM, DAY_END)) - top);
               const isOwn = b.organiserUpn === viewerUpn;
@@ -292,8 +311,8 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
               );
             })}
 
-            {/* Drag selection overlay */}
-            {drag && Math.abs(drag.end - drag.anchor) >= 15 && (
+            {/* Drag selection overlay — same threshold as the pointerup commit */}
+            {drag && Math.abs(drag.end - drag.anchor) >= SLOT_STEP_MIN && (
               <div
                 className="absolute left-1.5 right-1.5 rounded-lg bg-primary/20 border-2 border-primary/60 pointer-events-none z-10 px-2 pt-1"
                 style={{ top: dragTop, height: dragHeight }}

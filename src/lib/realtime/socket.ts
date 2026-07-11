@@ -159,9 +159,7 @@ async function authenticateDevice(token: string): Promise<DeviceClientData> {
     deviceId: device.id,
     roomId: device.room.id,
     parentCompositeId:
-      device.scope === "SECTION" && device.room.parentRoomId
-        ? device.room.parentRoomId
-        : undefined,
+      device.scope === "SECTION" && device.room.parentRoomId ? device.room.parentRoomId : undefined,
     scope: device.scope,
   };
 }
@@ -172,7 +170,7 @@ async function authenticateDevice(token: string): Promise<DeviceClientData> {
 
 export async function computeSnapshot(
   roomId: string,
-  viewer: ClientData
+  viewer: ClientData,
 ): Promise<RealtimeEnvelope> {
   const now = new Date();
   const until = new Date(now.getTime() + 48 * 60 * 60 * 1000);
@@ -199,7 +197,7 @@ export async function computeSnapshot(
       const organiserIsStaff = staffMap.get(b.organiserUpn) ?? false;
       const vis = bookingDetailVisibility(
         { upn: viewer.upn, isStaff: viewer.isStaff, isAdmin: viewer.isAdmin },
-        { organiserUpn: b.organiserUpn, organiserIsStaff }
+        { organiserUpn: b.organiserUpn, organiserIsStaff },
       );
       return vis === "full" ? serializeBookingFull(b) : serializeBookingBusy(b);
     });
@@ -225,10 +223,13 @@ async function handleSubscribe(socket: any, rawIds: unknown[], clientData: Porta
   });
 
   for (const room of rooms) {
-    if (!canSeeRoom({ isStaff: clientData.isStaff, isAdmin: clientData.isAdmin }, room)) {
+    // showAll=true to match the pages (portal grid, room detail, carpark all
+    // render non-bookable rooms for students); snapshot/event payloads are
+    // visibility-stripped per viewer, so this widens nothing beyond the pages.
+    if (!canSeeRoom({ isStaff: clientData.isStaff, isAdmin: clientData.isAdmin }, room, true)) {
       logger.warn(
         { upn: clientData.upn, roomId: room.id },
-        "ws: subscribe rejected (room not visible)"
+        "ws: subscribe rejected (room not visible)",
       );
       continue;
     }
@@ -322,11 +323,7 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
 
       // Heartbeat handler — update lastSeenAt in the background
       socket.on("message", (msg: unknown) => {
-        if (
-          msg &&
-          typeof msg === "object" &&
-          (msg as { type?: string }).type === "heartbeat"
-        ) {
+        if (msg && typeof msg === "object" && (msg as { type?: string }).type === "heartbeat") {
           db.device
             .update({
               where: { id: (clientData as DeviceClientData).deviceId },
@@ -339,7 +336,7 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
       socket.on("message", async (msg: unknown) => {
         logger.info(
           { socketId: socket.id, msgType: (msg as Record<string, unknown>)?.type },
-          "ws: ws_messages_in"
+          "ws: ws_messages_in",
         );
         try {
           if (!msg || typeof msg !== "object") return;

@@ -19,19 +19,14 @@ export default async function ProfilePage() {
       where: { organiserUpn: session.upn, endUtc: { gt: new Date() } },
     }),
     db.room.findMany({
+      where: { kind: { notIn: ["MINIBUS", "PARKING", "PARKING_BAY"] } },
       orderBy: { displayName: "asc" },
-      select: { id: true, displayName: true, kind: true, bookable: true },
+      select: { id: true, displayName: true, bookable: true },
     }),
   ]);
 
   const visibleRooms = allRooms
-    .filter(
-      (r) =>
-        r.kind !== "MINIBUS" &&
-        r.kind !== "PARKING" &&
-        r.kind !== "PARKING_BAY" &&
-        canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, true),
-    )
+    .filter((r) => canSeeRoom({ isStaff: session.isStaff, isAdmin: session.isAdmin }, r, true))
     .map((r) => ({ id: r.id, displayName: r.displayName }));
 
   return (

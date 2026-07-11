@@ -1,4 +1,5 @@
 import { localTime, localDateISO, minutesToTime } from "@/lib/utils";
+import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "./hours";
 
 interface Slotish {
   startUtc: string;
@@ -45,8 +46,8 @@ export function findNextFreeSlot(
   bookings: Slotish[],
   date: string,
   durationMin: number,
-  firstStart = 8 * 60,
-  lastEnd = 20 * 60,
+  firstStart = BOOKABLE_START_MIN,
+  lastEnd = BOOKABLE_END_MIN,
 ): FreeSlot | null {
   const dayBaseMs = new Date(`${date}T00:00:00`).getTime();
   const busy = bookings.map((b) => ({
@@ -54,7 +55,7 @@ export function findNextFreeSlot(
     e: new Date(b.endUtc).getTime(),
   }));
   const nowMs = Date.now();
-  for (let m = firstStart; m + durationMin <= lastEnd; m += 15) {
+  for (let m = firstStart; m + durationMin <= lastEnd; m += SLOT_STEP_MIN) {
     const s = dayBaseMs + m * 60_000;
     if (s < nowMs) continue;
     const e = s + durationMin * 60_000;

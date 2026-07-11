@@ -4,8 +4,14 @@ import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "r
 import RoomCard from "./RoomCard";
 import { computeRoomStatus } from "@/lib/booking/status";
 import { useSocket } from "@/lib/socket-context";
-import { localDateISO, timeToMinutes, minutesToTime, localTime } from "@/lib/utils";
-import { freeUntilLabel, busyUntilLabel, bookedAtLabel } from "@/lib/booking/labels";
+import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
+import {
+  freeUntilLabel,
+  busyUntilLabel,
+  bookedAtLabel,
+  findNextFreeSlot,
+} from "@/lib/booking/labels";
+import { useFavourites } from "@/hooks/useFavourites";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 import type { RoomAvailability } from "@/app/api/availability/route";
 
@@ -121,29 +127,7 @@ export default function RoomGrid({
   const [avail, setAvail] = useState<Record<string, RoomAvailability>>({});
   const [availLoading, setAvailLoading] = useState(false);
 
-  const [favourites, setFavourites] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const saved = localStorage.getItem("mrbs:fav");
-      return saved ? new Set(JSON.parse(saved) as string[]) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
-  function toggleFavourite(roomId: string) {
-    setFavourites((prev) => {
-      const next = new Set(prev);
-      if (next.has(roomId)) next.delete(roomId);
-      else next.add(roomId);
-      try {
-        localStorage.setItem("mrbs:fav", JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }
+  const { favourites, toggleFavourite } = useFavourites();
 
   const permitted = new Set(permittedRoomIds);
 
@@ -256,10 +240,7 @@ export default function RoomGrid({
   const filtered = rooms
     .filter((r) => matchesStaticFilters(r) && (!onlyFree || !avail[r.id] || avail[r.id].free))
     .sort((a, b) => {
-      const afav = favourites.has(a.id);
-      const bfav = favourites.has(b.id);
-      if (afav && !bfav) return -1;
-      if (!afav && bfav) return 1;
+      // Favourites don't need sorting here — they render as their own section
       const af = avail[a.id]?.free !== false;
       const bf = avail[b.id]?.free !== false;
       if (af && !bf) return -1;
@@ -270,11 +251,25 @@ export default function RoomGrid({
   const favRooms = filtered.filter((r) => favourites.has(r.id));
   const otherRooms = filtered.filter((r) => !favourites.has(r.id));
 
+  // Favourited rooms get their own labelled section above the rest
+  const sections =
+    favRooms.length > 0
+      ? [
+          { key: "favourites", icon: "star", title: "Favourites", rooms: favRooms },
+          ...(otherRooms.length > 0
+            ? [{ key: "all", icon: "meeting_room", title: "All rooms", rooms: otherRooms }]
+            : []),
+        ]
+      : [{ key: "all", icon: "", title: "", rooms: filtered }];
+
   const freeCount = filtered.filter((r) => avail[r.id]?.free !== false).length;
 
-  // When "show only available" hides everything, work out when the first
-  // matching room frees up (bookings are only loaded ~48h out, so only for
-  // today/tomorrow) and offer to move the search to that time.
+  const windowMin = Math.max(timeToMinutes(filterTo) - timeToMinutes(filterFrom), 15);
+
+  // When "show only available" hides everything, find the earliest time any
+  // matching room can actually fit the requested duration (not just the first
+  // booking end — that instant may sit inside another booking). Bookings are
+  // only loaded ~48h out, so this only works for today/tomorrow.
   const busyHidden = filtered.length === 0 && onlyFree ? rooms.filter(matchesStaticFilters) : [];
   const freesUpAt: string | null = (() => {
     if (
@@ -282,21 +277,20 @@ export default function RoomGrid({
       filterDate > localDateISO(new Date(Date.now() + 24 * 60 * 60 * 1000))
     )
       return null;
-    const windowStart = new Date(`${filterDate}T${filterFrom}:00`);
-    const windowEnd = new Date(`${filterDate}T${filterTo}:00`);
-    const ends = busyHidden.flatMap((r) =>
-      (bookingsMap[r.id] ?? [])
-        .filter((b) => new Date(b.startUtc) < windowEnd && new Date(b.endUtc) > windowStart)
-        .map((b) => b.endUtc),
-    );
-    if (ends.length === 0) return null;
-    const earliest = ends.sort()[0];
-    if (localDateISO(earliest) !== filterDate) return null;
-    // Round up to the next quarter hour; only offer times a booking can start at
-    const rounded = minutesToTime(
-      Math.min(Math.ceil(timeToMinutes(localTime(earliest)) / 15) * 15, 20 * 60),
-    );
-    return rounded < "20:00" ? rounded : null;
+    const starts = busyHidden
+      .map((r) =>
+        findNextFreeSlot(
+          bookingsMap[r.id] ?? [],
+          filterDate,
+          windowMin,
+          timeToMinutes(filterFrom),
+          21 * 60,
+        ),
+      )
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .map((s) => s.start)
+      .sort();
+    return starts[0] ?? null;
   })();
 
   const dateLabel =
@@ -569,7 +563,11 @@ export default function RoomGrid({
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {freesUpAt && (
                   <button
-                    onClick={() => setFilterFrom(freesUpAt)}
+                    onClick={() => {
+                      // Move the whole window, keeping its length
+                      setFilterFrom(freesUpAt);
+                      setFilterTo(addMinutes(freesUpAt, windowMin));
+                    }}
                     className="px-4 py-2 text-sm rounded-full bg-primary text-on-primary font-semibold hover:bg-primary-container transition-colors"
                   >
                     Try from {freesUpAt} — the first room frees up then
@@ -594,72 +592,56 @@ export default function RoomGrid({
               </div>
             </div>
           ) : (
-            (() => {
-              const renderCard = (room: Room) => {
-                const bk = bookingsMap[room.id] ?? [];
-                const status = computeRoomStatus(bk, now);
-                const nextLabel =
-                  status === "busy"
-                    ? busyUntilLabel(bk, now)
-                    : status === "soon"
-                      ? bookedAtLabel(bk, now)
-                      : freeUntilLabel(bk, now);
+            sections.map(({ key, icon, title, rooms: sectionRooms }) => (
+              <section key={key} className="mb-8 last:mb-0">
+                {title && (
+                  <h3 className="flex items-center gap-1.5 text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3">
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      {icon}
+                    </span>
+                    {title}
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter">
+                  {sectionRooms.map((room) => {
+                    const bk = bookingsMap[room.id] ?? [];
+                    const status = computeRoomStatus(bk, now);
+                    const nextLabel =
+                      status === "busy"
+                        ? busyUntilLabel(bk, now)
+                        : status === "soon"
+                          ? bookedAtLabel(bk, now)
+                          : freeUntilLabel(bk, now);
 
-                const freeBayCount =
-                  room.kind === "PARKING" && room.bayIds
-                    ? room.bayIds.filter((bayId) => {
-                        const bayBk = bookingsMap[bayId] ?? [];
-                        return !bayBk.some(
-                          (b) => new Date(b.startUtc) <= now && new Date(b.endUtc) > now,
-                        );
-                      }).length
-                    : undefined;
+                    const freeBayCount =
+                      room.kind === "PARKING" && room.bayIds
+                        ? room.bayIds.filter((bayId) => {
+                            const bayBk = bookingsMap[bayId] ?? [];
+                            return !bayBk.some(
+                              (b) => new Date(b.startUtc) <= now && new Date(b.endUtc) > now,
+                            );
+                          }).length
+                        : undefined;
 
-                return (
-                  <RoomCard
-                    key={room.id}
-                    room={room}
-                    bookings={bk}
-                    canBook={permitted.has(room.id)}
-                    nextLabel={nextLabel}
-                    filterDate={filterDate}
-                    filterStart={filterFrom}
-                    filterEnd={filterTo}
-                    isFavourite={favourites.has(room.id)}
-                    onToggleFavourite={() => toggleFavourite(room.id)}
-                    freeBayCount={freeBayCount}
-                  />
-                );
-              };
-
-              const grid = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-gutter";
-              const heading = (icon: string, text: string) => (
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3">
-                  <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    {icon}
-                  </span>
-                  {text}
-                </h3>
-              );
-
-              // Favourited rooms get their own labelled section
-              return favRooms.length > 0 ? (
-                <>
-                  <section className="mb-8">
-                    {heading("star", "Favourites")}
-                    <div className={grid}>{favRooms.map(renderCard)}</div>
-                  </section>
-                  {otherRooms.length > 0 && (
-                    <section>
-                      {heading("meeting_room", "All rooms")}
-                      <div className={grid}>{otherRooms.map(renderCard)}</div>
-                    </section>
-                  )}
-                </>
-              ) : (
-                <div className={grid}>{filtered.map(renderCard)}</div>
-              );
-            })()
+                    return (
+                      <RoomCard
+                        key={room.id}
+                        room={room}
+                        bookings={bk}
+                        canBook={permitted.has(room.id)}
+                        nextLabel={nextLabel}
+                        filterDate={filterDate}
+                        filterStart={filterFrom}
+                        filterEnd={filterTo}
+                        isFavourite={favourites.has(room.id)}
+                        onToggleFavourite={() => toggleFavourite(room.id)}
+                        freeBayCount={freeBayCount}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            ))
           )}
 
           {/* Footer */}

@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import CancelDialog from "@/components/portal/CancelDialog";
 import { localTime } from "@/lib/utils";
+import { buildIcs } from "@/lib/ics";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,36 +32,15 @@ interface BookingRow {
 
 // The portal is the only system that can write to room calendars, so give
 // users a standards-based way to get the booking into their own calendar.
-function icsEscape(text: string): string {
-  return text
-    .replace(/\\/g, "\\\\")
-    .replace(/[,;]/g, (c) => `\\${c}`)
-    .replace(/\n/g, "\\n");
-}
-
-function icsTimestamp(iso: string): string {
-  return new Date(iso)
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "Z");
-}
-
 function downloadIcs(b: BookingRow) {
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//Greenhead College//Room Booking//EN",
-    "BEGIN:VEVENT",
-    `UID:${b.id}@meetingrooms.greenhead.ac.uk`,
-    `DTSTAMP:${icsTimestamp(new Date().toISOString())}`,
-    `DTSTART:${icsTimestamp(b.startUtc)}`,
-    `DTEND:${icsTimestamp(b.endUtc)}`,
-    `SUMMARY:${icsEscape(b.subject || `Room booking — ${b.room.displayName}`)}`,
-    `LOCATION:${icsEscape([b.room.displayName, b.room.building].filter(Boolean).join(", "))}`,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ];
-  const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/calendar" });
+  const ics = buildIcs({
+    uid: `${b.id}@meetingrooms.greenhead.ac.uk`,
+    startUtc: b.startUtc,
+    endUtc: b.endUtc,
+    summary: b.subject || `Room booking — ${b.room.displayName}`,
+    location: [b.room.displayName, b.room.building].filter(Boolean).join(", "),
+  });
+  const blob = new Blob([ics], { type: "text/calendar" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

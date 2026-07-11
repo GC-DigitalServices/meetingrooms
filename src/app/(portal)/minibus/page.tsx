@@ -3,12 +3,9 @@ import { getServerSession } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
 import MinibusClient from "./MinibusClient";
 import { CarparkDateNav } from "@/components/portal/CarparkDateNav";
+import { localDateISO, londonDayStartUtc } from "@/lib/utils";
 
 export const runtime = "nodejs";
-
-function toLocalDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
-}
 
 export default async function MinibusPage({
   searchParams,
@@ -21,10 +18,9 @@ export default async function MinibusPage({
   const { date: dateParam } = await searchParams;
 
   const now = new Date();
-  const todayStr = toLocalDate(now);
+  const todayStr = localDateISO(now);
   const [ty, tm, td] = todayStr.split("-").map(Number);
-  const maxDate = new Date(Date.UTC(ty, tm - 1, td + 90));
-  const maxDateStr = toLocalDate(maxDate);
+  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
 
   let selectedDate = todayStr;
   if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
@@ -35,8 +31,9 @@ export default async function MinibusPage({
 
   const isToday = selectedDate === todayStr;
 
-  const dayStart = new Date(selectedDate + "T00:00:00.000Z");
-  const dayEnd = new Date(selectedDate + "T24:00:00.000Z");
+  // London midnight, not UTC midnight — during BST they differ by an hour
+  const dayStart = londonDayStartUtc(selectedDate);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   // For today: extend the window to 48h so "available until tomorrow" edge case works
   const queryEnd = isToday ? new Date(now.getTime() + 48 * 60 * 60 * 1000) : dayEnd;
   const queryStart = isToday ? now : dayStart;
@@ -78,14 +75,21 @@ export default async function MinibusPage({
   };
 
   const allBookings: SerializedBooking[] = rawBookings.map(
-    (b: { id: string; roomId: string; startUtc: Date; endUtc: Date; subject: string | null; organiserName: string | null }) => ({
+    (b: {
+      id: string;
+      roomId: string;
+      startUtc: Date;
+      endUtc: Date;
+      subject: string | null;
+      organiserName: string | null;
+    }) => ({
       id: b.id,
       roomId: b.roomId,
       startUtc: b.startUtc.toISOString(),
       endUtc: b.endUtc.toISOString(),
       subject: b.subject,
       organiserName: b.organiserName,
-    })
+    }),
   );
 
   // statusBookings: used by the client for "busy now" / "available until" (today only)
@@ -93,15 +97,17 @@ export default async function MinibusPage({
 
   // dayBookings: the selected day's schedule (for all dates)
   const dayBookings = isToday
-    ? allBookings.filter((b) => {
-        const d = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(b.startUtc));
-        return d === selectedDate;
-      })
+    ? allBookings.filter((b) => localDateISO(b.startUtc) === selectedDate)
     : allBookings;
 
   return (
     <div className="px-margin-mobile md:px-margin-desktop pt-lg pb-lg">
-      <CarparkDateNav selectedDate={selectedDate} today={todayStr} maxDate={maxDateStr} basePath="/minibus" />
+      <CarparkDateNav
+        selectedDate={selectedDate}
+        today={todayStr}
+        maxDate={maxDateStr}
+        basePath="/minibus"
+      />
       <MinibusClient
         minibuses={minibuses.map((m: { id: string; displayName: string; capacity: number }) => ({
           id: m.id,

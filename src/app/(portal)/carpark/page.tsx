@@ -20,7 +20,10 @@ export default async function CarParkPage({
 
   const now = new Date();
   const todayStr = localDateISO(now);
-  const maxDateStr = localDateISO(new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000));
+  // Calendar-day arithmetic, not wall-clock ms — adding 90*24h drifts a day
+  // when the span crosses a DST transition near midnight
+  const [ty, tm, td] = todayStr.split("-").map(Number);
+  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
 
   // Validate date param: must be YYYY-MM-DD and within [today, today+90]
   let selectedDate = todayStr;
@@ -87,7 +90,9 @@ export default async function CarParkPage({
 
           return (
             <CarparkPoolLive
-              key={pool.id}
+              // Keyed by date too: date navigation is a soft navigation, so
+              // without this the mounted component keeps the old day's state
+              key={`${pool.id}:${selectedDate}`}
               pool={{ id: pool.id, displayName: pool.displayName }}
               bayIds={bayIds}
               isToday={isToday}

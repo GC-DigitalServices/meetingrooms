@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useFavourites } from "@/hooks/useFavourites";
 
 interface Props {
   /** All rooms the user can see, so favourite ids can be resolved to names */
@@ -10,22 +10,13 @@ interface Props {
 
 /**
  * Favourites live in localStorage (set via the star on room cards), so this
- * has to be a client component; renders nothing until mounted to avoid a
- * hydration mismatch, and nothing at all if there are no favourites.
+ * has to be a client component; the hook loads after mount to avoid a
+ * hydration mismatch, and the section hides when there are no favourites.
  */
 export default function FavouriteRooms({ rooms }: Props) {
-  const [favIds, setFavIds] = useState<string[] | null>(null);
+  const { favourites } = useFavourites();
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("mrbs:fav");
-      setFavIds(saved ? (JSON.parse(saved) as string[]) : []);
-    } catch {
-      setFavIds([]);
-    }
-  }, []);
-
-  const favs = favIds ? rooms.filter((r) => favIds.includes(r.id)) : [];
+  const favs = rooms.filter((r) => favourites.has(r.id));
   if (favs.length === 0) return null;
 
   return (

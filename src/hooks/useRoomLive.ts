@@ -22,14 +22,31 @@ type Action =
   | { type: "UPDATE"; booking: BookingSlot }
   | { type: "DELETE"; bookingId: string };
 
+// The server snapshot only covers now → +48h (computeSnapshot in
+// src/lib/realtime/socket.ts), but consumers like DayTimeline render up to
+// 7 days from their server-loaded initial state. Within the snapshot window
+// the snapshot is authoritative; outside it, keep what we already have.
+const SNAPSHOT_WINDOW_MS = 48 * 60 * 60 * 1000;
+
 function reducer(state: BookingSlot[], action: Action): BookingSlot[] {
   switch (action.type) {
-    case "SNAPSHOT":
-      return action.bookings;
+    case "SNAPSHOT": {
+      const snapshotIds = new Set(action.bookings.map((b) => b.id));
+      const nowMs = Date.now();
+      const horizonMs = nowMs + SNAPSHOT_WINDOW_MS;
+      const outsideWindow = state.filter(
+        (b) =>
+          !snapshotIds.has(b.id) &&
+          (new Date(b.endUtc).getTime() <= nowMs || new Date(b.startUtc).getTime() >= horizonMs),
+      );
+      return [...outsideWindow, ...action.bookings];
+    }
     case "ADD":
-      return [...state, action.booking];
+      return state.some((b) => b.id === action.booking.id) ? state : [...state, action.booking];
     case "UPDATE":
-      return state.map((b) => (b.id === action.booking.id ? action.booking : b));
+      return state.some((b) => b.id === action.booking.id)
+        ? state.map((b) => (b.id === action.booking.id ? action.booking : b))
+        : [...state, action.booking];
     case "DELETE":
       return state.filter((b) => b.id !== action.bookingId);
   }
