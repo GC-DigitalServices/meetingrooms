@@ -12,10 +12,10 @@ export function NavLinks({ isAdmin, isStaff }: Props) {
   const pathname = usePathname();
 
   const links = [
-    { href: "/", label: "Meeting Rooms" },
+    { href: "/", label: "Home" },
     { href: "/bookings", label: "My Bookings" },
     { href: "/minibus", label: "Minibus" },
-    ...((isStaff || isAdmin) ? [{ href: "/carpark", label: "Visitor Car Park" }] : []),
+    ...(isStaff || isAdmin ? [{ href: "/carpark", label: "Visitor Car Park" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -25,20 +25,16 @@ export function NavLinks({ isAdmin, isStaff }: Props) {
   }
 
   return (
-    <nav className="hidden md:flex items-center gap-lg">
-      {links.map(({ href, label }) => (
-        <Link
-          key={href}
-          href={href}
-          className={`text-sm font-semibold pb-0.5 transition-colors ${
-            isActive(href)
-              ? "text-secondary-fixed border-b-2 border-secondary-fixed"
-              : "text-on-primary/80 hover:text-on-primary"
-          }`}
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
+    <>
+      {/* ▼▼▼ CHANGE ONLY THESE LINKS for your app ▼▼▼ */}
+      <nav className="gh-nav-links">
+        {links.map(({ href, label }) => (
+          <Link key={href} href={href} className={`gh-nav-link${isActive(href) ? " active" : ""}`}>
+            {label}
+          </Link>
+        ))}
+      </nav>
+      {/* ▲▲▲ CHANGE ONLY THESE LINKS ▲▲▲ */}
+    </>
   );
 }

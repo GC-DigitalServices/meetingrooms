@@ -62,3 +62,38 @@
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #bfc9c6; border-radius: 2px; }
+
+/* ---------------------------------------------------------------------------
+   Greenhead standard header nav (gh-nav) — structure lives in NavLinks.tsx;
+   apps swap the links, these classes provide the shared look.
+   Hidden below md: mobile navigation is the bottom tab bar.
+--------------------------------------------------------------------------- */
+.gh-nav-links {
+  display: none;
+  align-items: center;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .gh-nav-links {
+    display: flex;
+  }
+}
+
+.gh-nav-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding-bottom: 0.125rem;
+  color: rgb(255 255 255 / 0.8); /* on-primary at 80% — header is bg-primary */
+  border-bottom: 2px solid transparent;
+  transition: color 150ms;
+}
+
+.gh-nav-link:hover {
+  color: #ffffff;
+}
+
+.gh-nav-link.active {
+  color: #e9c349; /* secondary-fixed */
+  border-bottom-color: #e9c349;
+}
