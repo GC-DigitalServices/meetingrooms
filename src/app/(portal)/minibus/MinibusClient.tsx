@@ -79,7 +79,8 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <div className="w-full max-w-2xl space-y-8">
       <div>
         <h1 className="font-display font-extrabold text-headline-xl text-on-background">Minibus Booking</h1>
       </div>
@@ -205,6 +206,36 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
           </div>
         </div>
       )}
+
+      </div>
+
+      {/* Driver eligibility notice */}
+      <aside className="w-full lg:w-80 shrink-0 rounded-xl border border-surface-container-highest bg-white p-5 shadow-card">
+        <h2 className="font-display font-semibold text-headline-md text-on-background">Driver eligibility</h2>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          Please note, all stages below must have been completed before placing a booking. If you have not
+          completed the steps below for this academic year, you are ineligible to drive the minibus.
+        </p>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          For any queries, please contact{" "}
+          <a href="mailto:OperationsCoordination@greenhead.ac.uk" className="text-primary underline break-all">
+            OperationsCoordination@greenhead.ac.uk
+          </a>
+        </p>
+        <ul className="mt-4 space-y-2">
+          {[
+            "Completed the Staff Eligibility Form",
+            "Completed the Medical Declaration Form",
+            "Read and signed minibus Policy",
+            "Completed Midas training",
+          ].map((step) => (
+            <li key={step} className="flex items-start gap-2 text-sm text-on-surface">
+              <span className="material-symbols-outlined text-base text-primary mt-0.5 shrink-0">check_circle</span>
+              {step}
+            </li>
+          ))}
+        </ul>
+      </aside>
 
       {bookingTarget && (
         <BookingDialog
