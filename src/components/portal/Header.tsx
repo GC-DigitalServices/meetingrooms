@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Session } from "@/lib/auth/session";
 import { UserMenu } from "@/components/portal/UserMenu";
 import { NavLinks } from "@/components/portal/NavLinks";
@@ -10,11 +11,15 @@ export default function Header({ session }: Props) {
   return (
     <header className="bg-primary text-on-primary fixed top-0 left-0 w-full z-50 h-20 flex items-center justify-between px-margin-mobile md:px-margin-desktop border-b border-primary-container/50">
       {/* Brand */}
-      <div className="flex items-center gap-3">
-        <span className="bg-on-primary text-primary px-2 py-0.5 rounded-lg text-lg font-extrabold leading-none">
-          gc
-        </span>
-        <span className="hidden sm:block font-semibold text-base text-on-primary/90">Greenhead College</span>
+      <div className="flex items-center">
+        <Image
+          src="/greenhead_college_logo.jpeg"
+          alt="Greenhead College"
+          width={160}
+          height={56}
+          className="object-contain h-14 w-auto"
+          priority
+        />
       </div>
 
       {/* Desktop nav */}
