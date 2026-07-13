@@ -11,7 +11,7 @@ export default function Header({ session }: Props) {
   return (
     <header className="bg-primary text-on-primary fixed top-0 left-0 w-full z-50 h-20 flex items-center justify-between px-margin-mobile md:px-margin-desktop border-b border-primary-container/50">
       {/* Brand */}
-      <div className="flex items-center bg-white rounded-lg px-2 py-1">
+      <div className="flex items-center">
         <Image
           src="/greenhead_college_logo.jpeg"
           alt="Greenhead College"
