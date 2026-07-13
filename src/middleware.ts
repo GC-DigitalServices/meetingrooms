@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   "/favicon.ico",
   "/portal.webmanifest", // browsers fetch the manifest without cookies
   "/icons/", // manifest icons — same cookieless fetch
+  "/greenhead_college_logo.jpeg", // header logo — the image optimizer fetches it without cookies
 ];
 
 // ---------------------------------------------------------------------------
