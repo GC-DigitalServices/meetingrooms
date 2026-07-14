@@ -226,8 +226,8 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
           {[
             "Completed the Staff Eligibility Form",
             "Completed the Medical Declaration Form",
-            "Read and signed minibus Policy",
-            "Completed Midas training",
+            "Read and signed the Minibus Policy",
+            "Completed Midas Training",
           ].map((step) => (
             <li key={step} className="flex items-start gap-2 text-sm text-on-surface">
               <span className="material-symbols-outlined text-base text-primary mt-0.5 shrink-0">check_circle</span>
