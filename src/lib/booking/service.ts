@@ -114,6 +114,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   // Snap and validate
   const start = snapToSlot(input.start);
   const end   = snapToSlot(input.end);
+  // MINIBUS bookings can span multiple days — no duration cap applied.
   if (room.kind !== "MINIBUS") validateDuration(start, end);
 
   if (room.kind === "MINIBUS" && !input.premisesNotes?.trim()) {
