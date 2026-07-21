@@ -11,7 +11,7 @@ export default function Header({ session }: Props) {
   return (
     <header className="bg-primary text-on-primary fixed top-0 left-0 w-full z-50 h-20 flex items-center justify-between px-margin-mobile md:px-margin-desktop border-b border-primary-container/50">
       {/* Brand */}
-      <div className="flex items-center">
+      <div className="flex items-center gap-3">
         <Image
           src="/greenhead_college_logo.jpeg"
           alt="Greenhead College"
@@ -20,6 +20,9 @@ export default function Header({ session }: Props) {
           className="object-contain h-12 w-auto"
           priority
         />
+        <span className="text-lg font-semibold tracking-tight whitespace-nowrap">
+          Meeting Rooms
+        </span>
       </div>
 
       {/* Desktop nav */}
