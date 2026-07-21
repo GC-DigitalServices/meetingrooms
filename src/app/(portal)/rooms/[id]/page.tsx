@@ -5,14 +5,22 @@ import { db } from "@/lib/db/client";
 import { canSeeRoom, bookingDetailVisibility } from "@/lib/booking/visibility";
 import { canUserBookRoom } from "@/lib/booking/permissions";
 import DayTimeline from "@/components/portal/DayTimeline";
+import { CarparkDateNav } from "@/components/portal/CarparkDateNav";
 import { Badge } from "@/components/ui/badge";
-import { localTime, localDateISO } from "@/lib/utils";
+import { localTime, localDateISO, londonDayStartUtc } from "@/lib/utils";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
 export const runtime = "nodejs";
 
-export default async function RoomDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RoomDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ date?: string }>;
+}) {
   const { id } = await params;
+  const { date: dateParam } = await searchParams;
   const session = await getServerSession();
   if (!session) redirect("/sign-in");
 
@@ -31,11 +39,25 @@ export default async function RoomDetailPage({ params }: { params: Promise<{ id:
     /* not permitted */
   }
 
-  // 7-day window starting from start of today
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const until7d = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const todayStr = localDateISO(now);
+  // Calendar-day arithmetic, not wall-clock ms — adding 90*24h drifts a day
+  // when the span crosses a DST transition near midnight
+  const [ty, tm, td] = todayStr.split("-").map(Number);
+  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
+
+  // Validate ?date param: YYYY-MM-DD within [today, today+90]. Parking pools
+  // are always shown for today — their own /carpark page handles date nav.
+  let selectedDate = todayStr;
+  if (room.kind !== "PARKING" && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    if (dateParam >= todayStr && dateParam <= maxDateStr) selectedDate = dateParam;
+  }
+  const isToday = selectedDate === todayStr;
+
+  // Single-day window (London midnight, DST-safe). Overlap query so multi-day
+  // bookings (e.g. minibus hires) still render on every day they span.
+  const dayStart = londonDayStartUtc(selectedDate);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
   // For PARKING pools, load bookings across all bay IDs
   const bookingRoomIds = room.kind === "PARKING" ? room.sections.map((s) => s.id) : [id];
@@ -44,8 +66,8 @@ export default async function RoomDetailPage({ params }: { params: Promise<{ id:
   const rawBookings = await db.booking.findMany({
     where: {
       roomId: { in: bookingRoomIds },
-      startUtc: { lt: until7d },
-      endUtc: { gt: todayStart },
+      startUtc: { lt: dayEnd },
+      endUtc: { gt: dayStart },
     },
     orderBy: { startUtc: "asc" },
   });
@@ -94,7 +116,6 @@ export default async function RoomDetailPage({ params }: { params: Promise<{ id:
       (b) => new Date(b.startUtc).getTime() <= nowMs && new Date(b.endUtc).getTime() > nowMs,
     ).length;
     const freeNow = totalBays - bookedNow;
-    const todayStr = localDateISO(now);
     const todayBookings = rawBookings.filter((b) => localDateISO(b.startUtc) === todayStr);
 
     return (
@@ -172,12 +193,22 @@ export default async function RoomDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
+        <CarparkDateNav
+          selectedDate={selectedDate}
+          today={todayStr}
+          maxDate={maxDateStr}
+          basePath={`/rooms/${room.id}`}
+        />
+
         <DayTimeline
+          key={selectedDate}
           room={{ id: room.id, displayName: room.displayName, kind: room.kind }}
           initialBookings={initialBookings}
           canBook={canBook}
           viewerUpn={session.upn}
           isAdmin={session.isAdmin}
+          selectedDate={selectedDate}
+          isToday={isToday}
         />
       </div>
     </div>

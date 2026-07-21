@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { addDays, format, isToday } from "date-fns";
 import BookingDialog from "./BookingDialog";
 import CancelDialog from "./CancelDialog";
 import { useRoomLive } from "@/hooks/useRoomLive";
@@ -40,11 +39,20 @@ interface Props {
   canBook: boolean;
   viewerUpn: string;
   isAdmin: boolean;
+  selectedDate: string; // YYYY-MM-DD, the day being viewed
+  isToday: boolean;     // selectedDate === today (server-computed, avoids client tz drift)
 }
 
-export default function DayTimeline({ room, initialBookings, canBook, viewerUpn, isAdmin }: Props) {
+export default function DayTimeline({
+  room,
+  initialBookings,
+  canBook,
+  viewerUpn,
+  isAdmin,
+  selectedDate,
+  isToday,
+}: Props) {
   const bookings = useRoomLive(room.id, initialBookings);
-  const [selectedDay, setSelectedDay] = useState(0);
   const [bookingSlot, setBookingSlot] = useState<{
     date: string;
     start: string;
@@ -57,20 +65,18 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
   const [drag, setDrag] = useState<{ anchor: number; end: number } | null>(null);
   const tapAnchor = useRef<number | null>(null);
 
-  const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
-  const activeDay = days[selectedDay];
-  const activeDayStr = format(activeDay, "yyyy-MM-dd");
+  const activeDayStr = selectedDate;
   const now = new Date();
   const nowMin = timeToMinutes(localTime(now));
-  const showNow =
-    selectedDay === 0 && isToday(activeDay) && nowMin >= DAY_START && nowMin <= DAY_END;
+  const showNow = isToday && nowMin >= DAY_START && nowMin <= DAY_END;
 
   useEffect(() => {
     if (!scrollRef.current) return;
-    const y = selectedDay === 0 ? Math.max(0, minToY(Math.max(DAY_START, nowMin)) - 80) : 0;
-    scrollRef.current.scrollTop = y;
+    scrollRef.current.scrollTop = isToday
+      ? Math.max(0, minToY(Math.max(DAY_START, nowMin)) - 80)
+      : 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDay]);
+  }, [selectedDate]);
 
   // Overlap test, not start-date equality — multi-day bookings (minibus
   // hires) must render on every day they span
@@ -80,15 +86,19 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
     )
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc));
 
-  // Live status (about right now) + one-tap booking of the day's next free hour
-  const status = computeRoomStatus(bookings, now);
-  const pill = STATUS_META[status];
+  // Live status is about right now — only meaningful on today's view, where the
+  // loaded bookings include the current moment. Other days show no "now" pill.
+  const status = isToday ? computeRoomStatus(bookings, now) : null;
+  const pill = status ? STATUS_META[status] : null;
   const statusDetail =
     status === "busy"
       ? busyUntilLabel(bookings, now)
       : status === "soon"
         ? bookedAtLabel(bookings, now)
-        : freeUntilLabel(bookings, now);
+        : status === "free"
+          ? freeUntilLabel(bookings, now)
+          : "";
+  // One-tap booking of the selected day's next free hour (past slots skipped).
   const nextFree = canBook ? findNextFreeSlot(dayBookings, activeDayStr, 60) : null;
 
   // Cached on pointerdown: pointer capture pins the grid for the whole drag,
@@ -158,13 +168,6 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
     tapAnchor.current = null;
   }
 
-  function dayTabLabel(i: number): string {
-    const d = days[i];
-    if (isToday(d)) return "Today";
-    if (i === 1) return "Tomorrow";
-    return format(d, "EEE d MMM");
-  }
-
   const hours = Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => DAY_START / 60 + i);
 
   const dragTop = drag ? minToY(Math.min(drag.anchor, drag.end)) : 0;
@@ -173,44 +176,33 @@ export default function DayTimeline({ room, initialBookings, canBook, viewerUpn,
   return (
     <>
       {/* Live status + quick book */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${pill.className}`}>
-            {pill.label}
-          </span>
-          {statusDetail && <span className="text-sm text-on-surface-variant">{statusDetail}</span>}
+      {(pill || nextFree) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            {pill && (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${pill.className}`}>
+                {pill.label}
+              </span>
+            )}
+            {statusDetail && (
+              <span className="text-sm text-on-surface-variant">{statusDetail}</span>
+            )}
+          </div>
+          {nextFree && (
+            <button
+              onClick={() =>
+                setBookingSlot({ date: activeDayStr, start: nextFree.start, end: nextFree.end })
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-on-primary text-sm font-semibold hover:bg-primary-container transition-colors"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden="true">
+                bolt
+              </span>
+              Book {nextFree.start} – {nextFree.end}
+            </button>
+          )}
         </div>
-        {nextFree && (
-          <button
-            onClick={() =>
-              setBookingSlot({ date: activeDayStr, start: nextFree.start, end: nextFree.end })
-            }
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-on-primary text-sm font-semibold hover:bg-primary-container transition-colors"
-          >
-            <span className="material-symbols-outlined text-base" aria-hidden="true">
-              bolt
-            </span>
-            Book {nextFree.start} – {nextFree.end}
-          </button>
-        )}
-      </div>
-
-      {/* Day tabs */}
-      <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-        {days.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setSelectedDay(i)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
-              selectedDay === i
-                ? "bg-primary text-on-primary"
-                : "text-on-surface-variant hover:bg-surface-container"
-            }`}
-          >
-            {dayTabLabel(i)}
-          </button>
-        ))}
-      </div>
+      )}
 
       {/* Timeline wrapper */}
       <div className="flex border border-surface-container-highest rounded-xl overflow-hidden bg-surface-container-lowest">
