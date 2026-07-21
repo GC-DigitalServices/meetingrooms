@@ -390,13 +390,17 @@ export default function AdminRoomsPage() {
 
   async function deleteRoom(room: Room) {
     if (!confirm(`Delete "${room.displayName}"? This cannot be undone.`)) return;
-    const res = await fetch(`/api/admin/rooms/${room.id}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Room deleted");
-      void load();
-    } else {
-      const data = (await res.json()) as { error?: { message?: string } };
-      toast.error(data.error?.message ?? "Failed to delete room.");
+    try {
+      const res = await fetch(`/api/admin/rooms/${room.id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Room deleted");
+        void load();
+      } else {
+        const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        toast.error(data?.error?.message ?? `Failed to delete room (${res.status}).`);
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
     }
   }
 

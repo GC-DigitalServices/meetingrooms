@@ -119,7 +119,7 @@ export async function DELETE(
     return apiError("VALIDATION_ERROR", `Remove the ${existing.sections.length} child room(s) first.`);
   }
 
-  // Block if future bookings exist
+  // Block if future bookings exist — deleting the room would strand live reservations.
   const futureBookings = await db.booking.count({
     where: { roomId: id, endUtc: { gt: new Date() } },
   });
@@ -127,7 +127,7 @@ export async function DELETE(
     return apiError("VALIDATION_ERROR", `Cannot delete — ${futureBookings} upcoming booking(s) exist.`);
   }
 
-  // Cancel Graph subscription
+  // Cancel Graph subscription remotely (best-effort — its DB row is removed below).
   const sub = await db.graphSubscription.findFirst({ where: { roomId: id } });
   if (sub) {
     try {
@@ -135,16 +135,32 @@ export async function DELETE(
     } catch (err) {
       logger.warn({ subscriptionId: sub.id, err }, "admin: failed to delete Graph subscription on room delete");
     }
-    await db.graphSubscription.deleteMany({ where: { roomId: id } });
   }
 
-  await db.room.delete({ where: { id } });
+  // Cascade: past bookings and devices hold ON DELETE RESTRICT foreign keys, so the
+  // room can't be removed while they exist. Clear them (and the subscription row) with
+  // the room in one transaction. Past bookings are Exchange-cache rows; the audit log
+  // is untouched.
+  let pastBookings = 0;
+  let devices = 0;
+  try {
+    [pastBookings, devices] = await db.$transaction(async (tx) => {
+      const b = await tx.booking.deleteMany({ where: { roomId: id } });
+      const d = await tx.device.deleteMany({ where: { roomId: id } });
+      await tx.graphSubscription.deleteMany({ where: { roomId: id } });
+      await tx.room.delete({ where: { id } });
+      return [b.count, d.count];
+    });
+  } catch (err) {
+    logger.error({ roomId: id, err }, "admin: room delete transaction failed");
+    return apiError("INTERNAL_ERROR", "Failed to delete room.");
+  }
 
   await writeAudit({
     actor:    session.upn,
     action:   "room.delete",
     targetId: id,
-    metadata: { displayName: existing.displayName, kind: existing.kind },
+    metadata: { displayName: existing.displayName, kind: existing.kind, pastBookings, devices },
   });
 
   return new NextResponse(null, { status: 204 });
