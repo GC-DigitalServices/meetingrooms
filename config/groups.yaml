@@ -19,6 +19,9 @@ admin_group: "6f0bf91a-5b22-4a64-9874-6754d2f0e18e" # MRBS Admin
 # Also requires PREMISES_SENDER_UPN env var (the sending mailbox).
 premises_email: "premises@greenhead.ac.uk"
 
+# Additional address copied only on MINIBUS booking notifications.
+minibus_email: "OperationsCoordination@greenhead.ac.uk"
+
 # Email address (or DL) that receives system alert emails:
 # offline displays, subscription renewal failures, resync failures.
 # Requires MAIL_SENDER_UPN env var.

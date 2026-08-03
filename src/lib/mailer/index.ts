@@ -181,7 +181,12 @@ export async function sendPremisesNotification(params: PremisesNotifyParams): Pr
         message: {
           subject,
           body: { contentType: "Text", content: bodyLines.join("\n") },
-          toRecipients: [{ emailAddress: { address: groups.premises_email } }],
+          toRecipients: [
+            { emailAddress: { address: groups.premises_email } },
+            ...(isMinibus && groups.minibus_email
+              ? [{ emailAddress: { address: groups.minibus_email } }]
+              : []),
+          ],
         },
         saveToSentItems: false,
       }

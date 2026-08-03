@@ -14,6 +14,8 @@ const GroupsFileSchema = z.object({
   admin_group: z.string().uuid("admin_group must be a valid UUID"),
   // Optional — required for premises notifications.
   premises_email: z.string().email("premises_email must be a valid email address").optional(),
+  // Optional — additional recipient copied only on MINIBUS notifications.
+  minibus_email: z.string().email("minibus_email must be a valid email address").optional(),
   // Optional — required for system alert emails (offline displays, cron failures).
   admin_alert_email: z.string().email("admin_alert_email must be a valid email address").optional(),
 });
