@@ -52,8 +52,11 @@ async function graphFetch(
   );
 
   if (res.ok) {
-    if (res.status === 204) return undefined;
-    return res.json();
+    // Some Graph endpoints return a success with no body (204 No Content, and
+    // 202 Accepted for sendMail). Parsing an empty body as JSON throws
+    // "Unexpected end of JSON input", so only parse when there's a body.
+    const text = await res.text();
+    return text ? JSON.parse(text) : undefined;
   }
 
   const isRetryable = res.status === 429 || (res.status >= 500 && res.status < 600);
