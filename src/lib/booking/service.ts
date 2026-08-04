@@ -12,6 +12,7 @@ import {
   shouldNotifyPremises,
   sendPremisesNotification,
   sendParkingConfirmation,
+  sendMinibusConfirmation,
   computePremisesHash,
   formatLocal,
 } from "@/lib/mailer";
@@ -236,6 +237,23 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         portalUrl:       PUBLIC_BASE_URL,
         actorUpn:        input.actor.upn,
       });
+    }
+
+    // Minibus: email the booker a confirmation with the safety-check checklist
+    // attached (best-effort; the Exchange calendar invite is still sent too).
+    if (room.kind === "MINIBUS") {
+      const { PUBLIC_BASE_URL } = getConfig();
+      sendMinibusConfirmation({
+        bookingId:          created.id,
+        organiserUpn:       input.organiserUpn,
+        organiserName:      input.organiserName,
+        minibusDisplayName: room.displayName,
+        startUtc:           start,
+        endUtc:             end,
+        portalUrl:          PUBLIC_BASE_URL,
+      }).catch((err) =>
+        logger.warn({ err, bookingId: created.id }, "mailer: minibus_confirmation fire-and-forget failed")
+      );
     }
 
     // Parking: send email confirmation in place of calendar invite

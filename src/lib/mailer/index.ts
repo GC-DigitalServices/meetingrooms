@@ -3,6 +3,7 @@ import { getConfig } from "@/lib/config";
 import { loadGroups } from "@/lib/config/groups-loader";
 import { logger } from "@/lib/logger";
 import { writeAudit } from "@/lib/db/audit";
+import { getManagedFile, MINIBUS_CHECKLIST_KEY } from "@/lib/db/managedFiles";
 import { createHash } from "crypto";
 
 export type NotifyAction = "CREATE" | "UPDATED" | "CANCELLED";
@@ -144,6 +145,82 @@ export async function sendParkingConfirmation(params: {
     logger.info({ bookingId: params.bookingId }, "mailer: parking_confirmation_sent");
   } catch (err) {
     logger.error({ bookingId: params.bookingId, err }, "mailer: parking_confirmation_failed");
+  }
+}
+
+/**
+ * Sends a booking confirmation to the staff member who booked a minibus, with
+ * the safety-check checklist attached. Best-effort — failures are logged, never
+ * thrown, and never roll back the booking. The checklist is the admin-uploaded
+ * file managed via Admin → Minibus checklist; if none has been uploaded the
+ * confirmation is skipped entirely (the booker still receives the Exchange
+ * calendar invite as their confirmation).
+ */
+export async function sendMinibusConfirmation(params: {
+  bookingId: string;
+  organiserUpn: string;
+  organiserName: string;
+  minibusDisplayName: string;
+  startUtc: Date;
+  endUtc: Date;
+  portalUrl: string;
+}): Promise<void> {
+  const { MAIL_SENDER_UPN } = getConfig();
+  if (!MAIL_SENDER_UPN) {
+    logger.warn("mailer: MAIL_SENDER_UPN not configured, skipping minibus confirmation");
+    return;
+  }
+
+  const checklist = await getManagedFile(MINIBUS_CHECKLIST_KEY);
+  if (!checklist) {
+    logger.warn(
+      { bookingId: params.bookingId },
+      "mailer: no minibus checklist uploaded, skipping confirmation"
+    );
+    return;
+  }
+  const contentBytes = Buffer.from(checklist.data).toString("base64");
+
+  const start = formatLocal(params.startUtc);
+  const end   = formatLocal(params.endUtc);
+
+  const body = [
+    `Hi ${params.organiserName},`,
+    ``,
+    `Your minibus booking is confirmed.`,
+    ``,
+    `Minibus: ${params.minibusDisplayName}`,
+    `From: ${start}`,
+    `To:   ${end}`,
+    ``,
+    `The minibus safety-check checklist is attached. You must complete it on the day, before driving.`,
+    ``,
+    `To view or cancel this booking, visit: ${params.portalUrl}/bookings`,
+  ].join("\n");
+
+  try {
+    await graphClient.post(
+      `/users/${encodeURIComponent(MAIL_SENDER_UPN)}/sendMail`,
+      {
+        message: {
+          subject: `Minibus booking confirmed — ${start}`,
+          body: { contentType: "Text", content: body },
+          toRecipients: [{ emailAddress: { address: params.organiserUpn, name: params.organiserName } }],
+          attachments: [
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              name: checklist.filename,
+              contentType: checklist.contentType,
+              contentBytes,
+            },
+          ],
+        },
+        saveToSentItems: false,
+      }
+    );
+    logger.info({ bookingId: params.bookingId }, "mailer: minibus_confirmation_sent");
+  } catch (err) {
+    logger.error({ bookingId: params.bookingId, err }, "mailer: minibus_confirmation_failed");
   }
 }
 

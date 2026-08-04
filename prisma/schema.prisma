@@ -134,3 +134,16 @@ model AuditLog {
   @@index([at])
   @@index([actor, at])
 }
+
+// Admin-uploaded assets stored in Postgres (original data we own, not a Graph
+// cache). Keyed by a stable slug, e.g. "minibus-checklist". Small files only —
+// attached inline to confirmation emails.
+model ManagedFile {
+  key         String   @id
+  filename    String
+  contentType String
+  data        Bytes
+  size        Int
+  uploadedBy  String
+  uploadedAt  DateTime @default(now())
+}

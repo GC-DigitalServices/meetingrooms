@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { DoorOpen, Tablet, ClipboardList, Activity } from "lucide-react";
+import { DoorOpen, Tablet, ClipboardList, Activity, Bus } from "lucide-react";
 import { db } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const SECTIONS = [
   { href: "/admin/rooms", icon: DoorOpen, title: "Meeting Rooms", desc: "Edit meeting room metadata and permissions" },
   { href: "/admin/devices", icon: Tablet, title: "Devices", desc: "Pair and manage iPad displays" },
+  { href: "/admin/minibus-checklist", icon: Bus, title: "Minibus checklist", desc: "Upload the safety-check checklist emailed to minibus bookers" },
   { href: "/admin/audit", icon: ClipboardList, title: "Audit log", desc: "Review all booking actions" },
   { href: "/admin/status", icon: Activity, title: "System status", desc: "Check infrastructure and display health" },
 ];
