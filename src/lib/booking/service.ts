@@ -168,7 +168,9 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         resourceMailboxes:   mailboxes,
         source:              "PORTAL",
         bookingId:           "pending", // patched asynchronously below
-        skipOrganiserInvite: isParking,
+        // Parking and minibus bookers are confirmed by email, not a calendar
+        // invite — don't add them as an attendee.
+        skipOrganiserInvite: isParking || room.kind === "MINIBUS",
       });
       clearGraphDegraded();
     } catch {

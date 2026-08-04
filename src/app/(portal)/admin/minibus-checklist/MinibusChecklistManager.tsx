@@ -82,8 +82,8 @@ export function MinibusChecklistManager({ current }: { current: Current | null }
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No checklist uploaded yet. Until one is uploaded, the minibus confirmation email is
-              skipped — bookers still receive their Exchange calendar invite.
+              No checklist uploaded yet. Minibus bookers still receive their confirmation email —
+              it just won&apos;t have the checklist attached until you upload one here.
             </p>
           )}
         </CardContent>
