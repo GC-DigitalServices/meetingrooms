@@ -9,6 +9,7 @@ const ACTION_LABEL: Record<string, string> = {
   "booking.create": "Created booking",
   "booking.update": "Updated booking",
   "booking.cancel": "Cancelled booking",
+  "premises.notify.failed": "Premises email failed",
 };
 
 const fmt = new Intl.DateTimeFormat("en-GB", {
@@ -155,6 +156,9 @@ export default async function AdminAuditPage({
                           <span className="ml-2">
                             {fmt.format(new Date(String(meta.start)))}
                           </span>
+                        )}
+                        {!!meta.error && (
+                          <span className="text-red-600">Error: {String(meta.error)}</span>
                         )}
                       </td>
                     </tr>
