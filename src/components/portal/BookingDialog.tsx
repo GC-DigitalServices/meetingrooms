@@ -195,7 +195,7 @@ export default function BookingDialog({
 
   async function handleSubmit() {
     if (!isParking && !subject.trim()) {
-      setError("Subject is required.");
+      setError(isMinibus ? "Department is required." : "Subject is required.");
       return;
     }
     if (isMinibus && !premisesNotes.trim()) {
@@ -498,12 +498,12 @@ export default function BookingDialog({
           ) : (
             <div>
               <Label htmlFor="bd-subject">
-                Subject <span className="text-destructive">*</span>
+                {isMinibus ? "Department" : "Subject"} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="bd-subject"
                 className="mt-1"
-                placeholder="e.g. Year 10 Physics"
+                placeholder={isMinibus ? "e.g. PE Department" : "e.g. Year 10 Physics"}
                 maxLength={100}
                 value={subject}
                 disabled={submitting}
@@ -652,7 +652,9 @@ export default function BookingDialog({
                 ? "Time unavailable"
                 : isParking
                   ? "Book a bay"
-                  : "Book meeting room"}
+                  : isMinibus
+                    ? "Book minibus"
+                    : "Book meeting room"}
           </Button>
         </DialogFooter>
       </DialogContent>
