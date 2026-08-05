@@ -10,7 +10,7 @@ Working rules. `build.md` is the source of truth — if it conflicts with this f
 
 
 
-1\. \*\*Exchange is the source of truth; Postgres is a cache.\*\* Every mutation goes through Graph first, then Postgres. Never write to Postgres without a Graph call. (Exceptions — original data we own: rooms, devices, users, audit, sessions.)
+1\. \*\*Exchange is the source of truth; Postgres is a cache.\*\* Every mutation goes through Graph first, then Postgres. Never write to Postgres without a Graph call. (Exceptions — original data we own: rooms, devices, users, audit, sessions, managed files.)
 
 
 
