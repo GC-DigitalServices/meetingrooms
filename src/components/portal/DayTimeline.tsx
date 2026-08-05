@@ -40,7 +40,7 @@ interface Props {
   viewerUpn: string;
   isAdmin: boolean;
   selectedDate: string; // YYYY-MM-DD, the day being viewed
-  isToday: boolean;     // selectedDate === today (server-computed, avoids client tz drift)
+  isToday: boolean; // selectedDate === today (server-computed, avoids client tz drift)
 }
 
 export default function DayTimeline({
@@ -114,8 +114,8 @@ export default function DayTimeline({
   }
 
   // Clamp to BOOKABLE hours, not the view window — BookingDialog's time
-  // selects only offer 08:00–20:00, and passing values outside that range
-  // desyncs the select display from the submitted state.
+  // selects only offer the bookable window, and passing values outside that
+  // range desyncs the select display from the submitted state.
   function openSlot(startMin: number, endMin: number) {
     const start = Math.max(
       BOOKABLE_START_MIN,

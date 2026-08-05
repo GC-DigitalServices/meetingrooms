@@ -16,7 +16,7 @@ import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
 import { overlaps } from "@/lib/booking/conflicts";
 import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "@/lib/booking/hours";
 
-// Bookable hours in booking-slot steps (08:00 – 20:00 in 15-minute steps)
+// Bookable hours in booking-slot steps (see lib/booking/hours.ts for the window)
 const TIME_OPTIONS = Array.from(
   { length: (BOOKABLE_END_MIN - BOOKABLE_START_MIN) / SLOT_STEP_MIN + 1 },
   (_, i) => ({ value: minutesToTime(BOOKABLE_START_MIN + i * SLOT_STEP_MIN) }),

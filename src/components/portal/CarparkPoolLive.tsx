@@ -4,6 +4,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { useSocket } from "@/lib/socket-context";
 import { ParkingBookButton } from "./ParkingBookButton";
 import { localTime } from "@/lib/utils";
+import { BOOKABLE_START_MIN, BOOKABLE_END_MIN } from "@/lib/booking/hours";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
 interface PoolBooking {
@@ -120,11 +121,13 @@ export default function CarparkPoolLive({
     [bookings],
   );
 
-  // Slot boundaries and labels are fixed for the day
+  // Slot boundaries and labels are fixed for the day. Derived from the bookable
+  // window so the availability strip always covers the times a bay can be booked.
+  const SLOT_MIN = 30;
   const slotDefs = useMemo(
     () =>
-      Array.from({ length: (20 - 7) * 2 }, (_, i) => {
-        const startMs = dayStartMs + (7 * 60 + i * 30) * 60 * 1000;
+      Array.from({ length: (BOOKABLE_END_MIN - BOOKABLE_START_MIN) / SLOT_MIN }, (_, i) => {
+        const startMs = dayStartMs + (BOOKABLE_START_MIN + i * SLOT_MIN) * 60 * 1000;
         return { startMs, endMs: startMs + 30 * 60 * 1000, time: localTime(new Date(startMs)) };
       }),
     [dayStartMs],
