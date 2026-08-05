@@ -1,4 +1,5 @@
 import { db } from "@/lib/db/client";
+import { getConfig } from "@/lib/config";
 import { graphClient } from "@/lib/graph/client";
 import type { GraphCalendarViewResponse, GraphEvent } from "@/lib/graph/types";
 import { logger } from "@/lib/logger";
@@ -21,7 +22,7 @@ export function resolveLogicalRoomId(
   resourceAttendeeUpns: string[],
   mailboxToRoomId: Map<string, string>,
   sectionToParentId: Map<string, string>,
-  fallbackRoomId: string
+  fallbackRoomId: string,
 ): string {
   const upns = resourceAttendeeUpns.map((u) => u.toLowerCase());
   const roomIds = upns
@@ -39,14 +40,14 @@ export function resolveLogicalRoomId(
 // Sync a single mailbox
 // ---------------------------------------------------------------------------
 
-async function syncMailbox(
+export async function syncMailbox(
   mailboxUpn: string,
   fallbackRoomId: string,
   mailboxToRoomId: Map<string, string>,
-  sectionToParentId: Map<string, string>
+  sectionToParentId: Map<string, string>,
 ): Promise<{ added: number; updated: number; removed: number }> {
   const now = new Date();
-  const windowEnd = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days
+  const windowEnd = new Date(now.getTime() + getConfig().SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   // Fetch all events in the window, paginating through nextLinks.
   const events: GraphEvent[] = [];
@@ -64,8 +65,19 @@ async function syncMailbox(
   }
 
   // Current DB state keyed by iCalUId for dedup.
+  //
+  // Scoped to the same window calendarView returned (overlap, not containment —
+  // calendarView includes events straddling either edge). Anything outside it
+  // was never a candidate for this pass, so it must not be treated as stale
+  // below: a booking beyond windowEnd (an exam timetabled next term) or already
+  // in the past is absent from `events` simply because we did not ask for it,
+  // not because it was cancelled in Exchange.
   const dbRows = await db.booking.findMany({
-    where: { roomId: fallbackRoomId },
+    where: {
+      roomId: fallbackRoomId,
+      startUtc: { lt: windowEnd },
+      endUtc: { gt: now },
+    },
     select: { id: true, graphICalUid: true },
   });
   const dbByICalUid = new Map(dbRows.map((r) => [r.graphICalUid, r.id]));
@@ -85,21 +97,19 @@ async function syncMailbox(
       resourceUpns,
       mailboxToRoomId,
       sectionToParentId,
-      fallbackRoomId
+      fallbackRoomId,
     );
 
     const organiserProp = event.singleValueExtendedProperties?.find(
-      (p) => p.id === ORGANISER_UPN_PROP_ID
+      (p) => p.id === ORGANISER_UPN_PROP_ID,
     );
-    const organiserUpn =
-      organiserProp?.value ?? event.organizer.emailAddress.address;
+    const organiserUpn = organiserProp?.value ?? event.organizer.emailAddress.address;
 
     // Resolve from attendees: event.organizer is the room mailbox (we write under app creds).
     const organiserAttendee = event.attendees.find(
-      (a) => a.emailAddress.address.toLowerCase() === organiserUpn.toLowerCase()
+      (a) => a.emailAddress.address.toLowerCase() === organiserUpn.toLowerCase(),
     );
-    const organiserName =
-      organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
+    const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
 
     const data = {
       graphEventId: event.id,
@@ -136,7 +146,8 @@ async function syncMailbox(
     }
   }
 
-  // Delete bookings no longer in Exchange.
+  // Delete bookings no longer in Exchange. Only in-window rows are considered
+  // (see the dbRows query above).
   const staleUids = [...dbByICalUid.keys()].filter((uid) => !seenICalUids.has(uid));
   if (staleUids.length) {
     await db.booking.deleteMany({ where: { graphICalUid: { in: staleUids } } });
@@ -171,12 +182,7 @@ export async function fullResync(): Promise<void> {
   for (const room of rooms) {
     if (!room.mailboxUpn) continue;
     try {
-      const stats = await syncMailbox(
-        room.mailboxUpn,
-        room.id,
-        mailboxToRoomId,
-        sectionToParentId
-      );
+      const stats = await syncMailbox(room.mailboxUpn, room.id, mailboxToRoomId, sectionToParentId);
       totalAdded += stats.added;
       totalUpdated += stats.updated;
       totalRemoved += stats.removed;
@@ -194,6 +200,6 @@ export async function fullResync(): Promise<void> {
       removed: totalRemoved,
       errors,
     },
-    "graph: resync_completed"
+    "graph: resync_completed",
   );
 }

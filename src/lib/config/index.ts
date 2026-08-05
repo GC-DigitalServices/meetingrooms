@@ -21,14 +21,10 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().url("REDIS_URL must be a valid URL"),
 
   // Session cookie signing — min 32 chars
-  SESSION_SECRET: z
-    .string()
-    .min(32, "SESSION_SECRET must be at least 32 characters"),
+  SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
 
   // QR token HMAC signing — min 32 chars
-  QR_SIGNING_KEY: z
-    .string()
-    .min(32, "QR_SIGNING_KEY must be at least 32 characters"),
+  QR_SIGNING_KEY: z.string().min(32, "QR_SIGNING_KEY must be at least 32 characters"),
 
   // Canonical public URL — used for OAuth redirects, QR deep links, webhook URLs
   PUBLIC_BASE_URL: z.string().url("PUBLIC_BASE_URL must be a valid URL"),
@@ -37,6 +33,12 @@ const EnvSchema = z.object({
 
   // Optional — mailbox used as the From address for premises/transport notifications.
   MAIL_SENDER_UPN: z.string().email().optional(),
+
+  // How far ahead the nightly Graph→Postgres resync pulls calendar events.
+  // Must cover the furthest-out bookings written to room mailboxes by external
+  // systems (exam timetables are published a term ahead), otherwise those rooms
+  // look free in the portal and can be double-booked.
+  SYNC_WINDOW_DAYS: z.coerce.number().int().positive().max(730).default(180),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
