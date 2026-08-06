@@ -203,19 +203,26 @@ async function handleCreatedOrUpdated(
   // parentId for broadcast fan-out: section bookings go to both their channel and parent's.
   const parentId = sectionToParentId.get(logicalRoomId) ?? null;
 
-  // Dedup on iCalUId to handle composite-room bookings arriving as N notifications.
+  // Dedup on iCalUId to handle composite-room bookings arriving as N
+  // notifications (and concurrent redeliveries of the same one). graphICalUid is
+  // UNIQUE, so the upsert is atomic — two racing handlers cannot both insert.
+  // The findFirst below only decides which broadcast to emit; correctness no
+  // longer depends on it.
   const existing = await db.booking.findFirst({
     where: { graphICalUid: event.iCalUId },
     select: { id: true },
   });
+  const row = await db.booking.upsert({
+    where: { graphICalUid: event.iCalUId },
+    create: data,
+    update: data,
+  });
   if (existing) {
-    const updated = await db.booking.update({ where: { id: existing.id }, data });
-    publishBookingUpdated(updated, parentId).catch((err) =>
-      logger.warn({ err, bookingId: existing.id }, "ws: booking.updated broadcast failed")
+    publishBookingUpdated(row, parentId).catch((err) =>
+      logger.warn({ err, bookingId: row.id }, "ws: booking.updated broadcast failed")
     );
   } else {
-    const created = await db.booking.create({ data });
-    publishBookingCreated(created, parentId).catch((err) =>
+    publishBookingCreated(row, parentId).catch((err) =>
       logger.warn({ err, graphEventId }, "ws: booking.created broadcast failed")
     );
   }

@@ -63,7 +63,7 @@ model Room {
 model Booking {
   id                 String        @id @default(cuid())
   graphEventId       String        @unique
-  graphICalUid       String
+  graphICalUid       String        @unique
   roomId             String
   room               Room          @relation(fields: [roomId], references: [id])
   organiserUpn       String
@@ -82,7 +82,6 @@ model Booking {
   primaryMailboxUpn  String?       // mailbox where the Graph event lives; used for updates/deletes
 
   @@index([roomId, startUtc, endUtc])
-  @@index([graphICalUid])
   @@index([organiserUpn])
   @@index([recurringGroupId])
 }
