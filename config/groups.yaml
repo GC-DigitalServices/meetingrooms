@@ -13,7 +13,7 @@
 staff_groups:
   - "be1c4aa6-38e4-4232-bd61-955e63121fb1" # All Staff
 
-admin_group: "6f0bf91a-5b22-4a64-9874-6754d2f0e18e" # MRBS Admin
+admin_group: "ff0b0ad7-2321-4307-ba75-14df09069623" # MRBS Admin (dedicated Entra security group; was GC IT Support until 2026-08-06)
 
 # Email address that receives premises/transport notifications.
 # Also requires the MAIL_SENDER_UPN env var (the sending mailbox).
