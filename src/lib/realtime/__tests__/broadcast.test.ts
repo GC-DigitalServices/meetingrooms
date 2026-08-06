@@ -200,7 +200,7 @@ describe("publishBookingCreated → socket delivery", () => {
 
   it("publishBookingDeleted fans out to both section and composite channels", async () => {
     // Two clients: one subscribed to the section, one to the composite
-    let client2: ClientSocket;
+    let client2!: ClientSocket;
 
     await Promise.all([
       new Promise<void>((resolve, reject) => {
@@ -224,10 +224,12 @@ describe("publishBookingCreated → socket delivery", () => {
     ]);
 
     // Mock rooms so that room_section is bookable and room_composite is bookable
-    vi.mocked(db.room.findMany).mockImplementation(async ({ where }) => {
-      const ids = (where as { id?: { in?: string[] } })?.id?.in ?? [];
-      return ids.map((id) => ({ id, bookable: true })) as never[];
-    });
+    vi.mocked(db.room.findMany).mockImplementation(
+      (async (args: { where?: { id?: { in?: string[] } } }) => {
+        const ids = args?.where?.id?.in ?? [];
+        return ids.map((id) => ({ id, bookable: true }));
+      }) as unknown as typeof db.room.findMany,
+    );
 
     client.emit("message", { type: "subscribe", roomIds: ["room_section"] });
     client2.emit("message", { type: "subscribe", roomIds: ["room_composite"] });

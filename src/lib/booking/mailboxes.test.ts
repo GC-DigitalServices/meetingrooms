@@ -31,12 +31,12 @@ describe("resolveBookingMailboxes", () => {
   });
 
   it("throws when composite has no section mailboxes", () => {
-    expect(() => resolveBookingMailboxes(comp, [])).toThrow("no section mailboxes");
+    expect(() => resolveBookingMailboxes(comp, [])).toThrow("no calendar mailboxes configured");
   });
 
   it("throws when standard room has no mailboxUpn", () => {
     const noMbox = { id: "x", kind: "STANDARD", mailboxUpn: null };
-    expect(() => resolveBookingMailboxes(noMbox, [])).toThrow("no mailboxUpn");
+    expect(() => resolveBookingMailboxes(noMbox, [])).toThrow("does not have a calendar mailbox");
   });
 });
 
@@ -59,5 +59,9 @@ describe("bookingLockKey", () => {
 
   it("falls back to own id for SECTION with no parent", () => {
     expect(bookingLockKey("s1", "SECTION", null)).toBe("lock:room:s1");
+  });
+
+  it("locks on parentRoomId for PARKING_BAY rooms", () => {
+    expect(bookingLockKey("bay1", "PARKING_BAY", "pool1")).toBe("lock:room:pool1");
   });
 });
