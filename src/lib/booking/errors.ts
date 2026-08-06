@@ -46,13 +46,3 @@ export class GraphUnavailableError extends Error {
     this.name = "GraphUnavailableError";
   }
 }
-
-// HTTP status mappings
-export const ERROR_STATUS: Record<string, number> = {
-  NotPermittedError: 403,
-  ConflictError: 409,
-  NotOrganiserError: 403,
-  OutOfHoursError: 400,
-  RoomNotBookableError: 400,
-  LockTimeoutError: 503,
-};

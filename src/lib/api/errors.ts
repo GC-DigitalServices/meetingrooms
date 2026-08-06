@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Canonical API error envelope: { error: { code, message, details? } }
@@ -63,8 +64,13 @@ export function apiError(
  */
 export function bookingServiceError(err: unknown): NextResponse {
   if (err instanceof Error) {
-    const code = DOMAIN_ERROR_CODES[err.constructor.name];
+    // Match on err.name (set explicitly in each domain error constructor),
+    // NOT err.constructor.name — the latter is mangled by production
+    // minification, which would collapse every domain error into a 500.
+    const code = DOMAIN_ERROR_CODES[err.name];
     if (code) return apiError(code, err.message);
   }
+  // Genuinely unexpected — log it so a 500 in the booking path is traceable.
+  logger.error({ err }, "api: unhandled error in booking service");
   return apiError("INTERNAL_ERROR", "An unexpected error occurred");
 }

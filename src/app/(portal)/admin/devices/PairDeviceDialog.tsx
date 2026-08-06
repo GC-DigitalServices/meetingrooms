@@ -75,8 +75,8 @@ export function PairDeviceDialog({ rooms }: { rooms: Room[] }) {
         body: JSON.stringify({ roomId, scope, name: name.trim() || undefined }),
       });
       if (!res.ok) {
-        const body = (await res.json()) as { error?: string };
-        throw new Error(body.error ?? "Failed to generate pairing code");
+        const body = (await res.json()) as { error?: { message?: string } };
+        throw new Error(body.error?.message ?? "Failed to generate pairing code");
       }
       const data = (await res.json()) as PairResult;
       setResult(data);

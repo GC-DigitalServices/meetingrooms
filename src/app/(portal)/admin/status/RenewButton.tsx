@@ -11,9 +11,9 @@ export function RenewButton() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/subscriptions/renew", { method: "POST" });
-      const data = await res.json() as { renewed?: number; failed?: number; error?: string };
+      const data = await res.json() as { renewed?: number; failed?: number; error?: { message?: string } };
       if (!res.ok) {
-        toast.error(data.error ?? "Renewal failed");
+        toast.error(data.error?.message ?? "Renewal failed");
         return;
       }
       if (data.failed && data.failed > 0) {

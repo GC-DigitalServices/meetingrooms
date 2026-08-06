@@ -25,9 +25,11 @@ export function getRedisClient(): Redis {
     logger.error({ err }, "redis: connection error");
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForRedis.redis = client;
-  }
+  // Memoize in every environment. Previously this cached only outside
+  // production, so in prod getRedisClient() opened a brand-new connection on
+  // every call (locks, rate limits, webhooks) — exhausting Redis connections
+  // under load. The globalThis stash also survives dev HMR reloads.
+  globalForRedis.redis = client;
 
   return client;
 }

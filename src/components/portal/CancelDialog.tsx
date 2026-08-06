@@ -41,8 +41,8 @@ export default function CancelDialog({ open, onClose, bookingId, roomName, roomI
         onSuccess?.();
         onClose();
       } else {
-        const data = (await res.json()) as { error?: string };
-        toast.error(data.error ?? "Could not cancel booking");
+        const data = (await res.json()) as { error?: { message?: string } };
+        toast.error(data.error?.message ?? "Could not cancel booking");
       }
     } catch {
       toast.error("Network error. Please try again.");

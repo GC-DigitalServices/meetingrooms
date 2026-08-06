@@ -94,8 +94,8 @@ export default function MyBookingsPage() {
         setCancelRecurringTarget(null);
         void load();
       } else {
-        const data = (await res.json()) as { error?: string };
-        toast.error(data.error ?? "Could not cancel bookings");
+        const data = (await res.json()) as { error?: { message?: string } };
+        toast.error(data.error?.message ?? "Could not cancel bookings");
       }
     } catch {
       toast.error("Network error. Please try again.");
