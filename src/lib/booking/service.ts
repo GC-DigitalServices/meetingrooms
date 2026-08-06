@@ -143,17 +143,22 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     const existing = await db.booking.findMany({
       where: { roomId: { in: roomIds }, startUtc: { lt: end }, endUtc: { gt: start } },
     });
-    const conflict = findConflict({ startUtc: start, endUtc: end }, existing);
-    if (conflict) throw new ConflictError(`Conflicts with: ${conflict.subject}`);
 
-    // PARKING: pick a free bay inside the lock
     if (isParking) {
+      // A pool has several bays; one busy bay must NOT block the whole pool.
+      // So skip the blanket family conflict check and instead pick any free
+      // bay. (Running findConflict across all bays here would throw as soon as
+      // a single bay was occupied, making a multi-bay pool behave as one bay.)
       const busyBayIds = new Set(existing.map((c) => c.roomId));
       const freeBay = room.sections.find((b) => !!b.mailboxUpn && !busyBayIds.has(b.id));
       if (!freeBay) throw new ConflictError("No car park bays available at this time");
       primaryMbox = freeBay.mailboxUpn!;
       mailboxes = []; // no resource attendees — event sits on bay calendar only
       bookingRoomId = freeBay.id;
+    } else {
+      // Rooms (incl. composite/section family): any overlap in the family conflicts.
+      const conflict = findConflict({ startUtc: start, endUtc: end }, existing);
+      if (conflict) throw new ConflictError(`Conflicts with: ${conflict.subject}`);
     }
 
     // 4. Graph write
