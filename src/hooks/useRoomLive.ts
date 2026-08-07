@@ -68,7 +68,9 @@ export function useRoomLive(roomId: string, initial: BookingSlot[] = []): Bookin
   useEffect(() => {
     if (!socket || !roomId) return;
 
-    socket.emit("message", { type: "subscribe", roomIds: [roomId] });
+    const subscribe = () => socket.emit("message", { type: "subscribe", roomIds: [roomId] });
+    if (socket.connected) subscribe();
+    socket.on("connect", subscribe); // re-subscribe after any reconnect
 
     function onMessage(msg: Envelope) {
       const p = msg.payload;
@@ -88,6 +90,7 @@ export function useRoomLive(roomId: string, initial: BookingSlot[] = []): Bookin
     socket.on("message", onMessage);
 
     return () => {
+      socket.off("connect", subscribe);
       socket.off("message", onMessage);
       socket.emit("message", { type: "unsubscribe", roomIds: [roomId] });
     };

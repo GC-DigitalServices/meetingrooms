@@ -134,7 +134,9 @@ export default function RoomGrid({
   useEffect(() => {
     if (!socket) return;
     const roomIds = rooms.map((r) => r.id);
-    socket.emit("message", { type: "subscribe", roomIds });
+    const subscribe = () => socket.emit("message", { type: "subscribe", roomIds });
+    if (socket.connected) subscribe();
+    socket.on("connect", subscribe); // re-subscribe after any reconnect
 
     function onMessage(msg: { type: string; payload: Record<string, unknown> }) {
       const p = msg.payload;
@@ -158,6 +160,7 @@ export default function RoomGrid({
 
     socket.on("message", onMessage);
     return () => {
+      socket.off("connect", subscribe);
       socket.off("message", onMessage);
       socket.emit("message", { type: "unsubscribe", roomIds });
     };
