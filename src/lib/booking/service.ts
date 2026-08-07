@@ -179,7 +179,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
         skipOrganiserInvite: isParking || room.kind === "MINIBUS",
       });
       clearGraphDegraded();
-    } catch {
+    } catch (err) {
+      logger.error({ err, roomId: room.id, action: "create" }, "booking: Graph write failed");
       markGraphDegraded();
       throw new GraphUnavailableError();
     }
@@ -317,7 +318,8 @@ export async function updateBooking(
   // Snap times if provided
   const newStart = input.start ? snapToSlot(input.start) : existing.startUtc;
   const newEnd   = input.end   ? snapToSlot(input.end)   : existing.endUtc;
-  validateDuration(newStart, newEnd);
+  // MINIBUS hires can span multiple days — same duration-cap bypass as createBooking.
+  if (room.kind !== "MINIBUS") validateDuration(newStart, newEnd);
 
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
   const roomIds     = await familyRoomIds(room);
@@ -350,7 +352,8 @@ export async function updateBooking(
         endUtc:        newEnd,
       });
       clearGraphDegraded();
-    } catch {
+    } catch (err) {
+      logger.error({ err, bookingId, action: "update" }, "booking: Graph write failed");
       markGraphDegraded();
       throw new GraphUnavailableError();
     }
@@ -444,7 +447,8 @@ export async function cancelBooking(
     try {
       await deleteGraphEvent(primaryMbox, existing.graphEventId);
       clearGraphDegraded();
-    } catch {
+    } catch (err) {
+      logger.error({ err, bookingId, action: "cancel" }, "booking: Graph write failed");
       markGraphDegraded();
       throw new GraphUnavailableError();
     }
