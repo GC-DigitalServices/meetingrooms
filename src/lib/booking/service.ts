@@ -2,8 +2,9 @@ import { db } from "@/lib/db/client";
 import { canUserBookRoom, wouldPassWithoutAdmin } from "./permissions";
 import { findConflict } from "./conflicts";
 import { snapToSlot, validateDuration } from "./duration";
+import { isWithinBookableHours } from "./hours";
 import { resolveBookingMailboxes, bookingLockKey } from "./mailboxes";
-import { ConflictError, NotOrganiserError, GraphUnavailableError, RoomNotBookableError } from "./errors";
+import { ConflictError, NotOrganiserError, GraphUnavailableError, RoomNotBookableError, OutOfHoursError } from "./errors";
 import { isGraphDegraded, markGraphDegraded, clearGraphDegraded } from "./graph-health";
 import { withLock } from "@/lib/realtime/lock";
 import { createGraphEvent, updateGraphEvent, deleteGraphEvent } from "@/lib/graph/events";
@@ -118,6 +119,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   const end   = snapToSlot(input.end);
   // MINIBUS bookings can span multiple days — no duration cap applied.
   if (room.kind !== "MINIBUS") validateDuration(start, end);
+  // Enforce operating hours server-side (the client dropdowns are not trusted).
+  if (!isWithinBookableHours(room.kind, start, end)) throw new OutOfHoursError();
 
   if (room.kind === "MINIBUS" && !input.premisesNotes?.trim()) {
     throw new RoomNotBookableError("Destination, passengers and driver are required for minibus bookings.");
@@ -320,6 +323,7 @@ export async function updateBooking(
   const newEnd   = input.end   ? snapToSlot(input.end)   : existing.endUtc;
   // MINIBUS hires can span multiple days — same duration-cap bypass as createBooking.
   if (room.kind !== "MINIBUS") validateDuration(newStart, newEnd);
+  if (!isWithinBookableHours(room.kind, newStart, newEnd)) throw new OutOfHoursError();
 
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
   const roomIds     = await familyRoomIds(room);

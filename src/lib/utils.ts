@@ -97,3 +97,16 @@ function addDaysISO(date: string, days: number): string {
 export function addLondonWeeks(instant: Date, weeks: number): Date {
   return londonToUtc(addDaysISO(localDateISO(instant), weeks * 7), localTime(instant));
 }
+
+const LONDON_HM_FMT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Minutes since midnight (0–1439) in Europe/London for a UTC instant. DST-safe. */
+export function londonMinutesOfDay(date: Date): number {
+  const [h, m] = LONDON_HM_FMT.format(date).split(":").map(Number);
+  return h * 60 + m;
+}
