@@ -186,6 +186,8 @@ async function handleCreatedOrUpdated(
   );
   const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
 
+  // `source` is set only on create (below); omitting it from the update path
+  // preserves the booking's original IPAD_QR/PORTAL provenance across re-syncs.
   const data = {
     graphEventId: event.id,
     graphICalUid: event.iCalUId,
@@ -196,7 +198,6 @@ async function handleCreatedOrUpdated(
     startUtc: new Date(event.start.dateTime + "Z"),
     endUtc: new Date(event.end.dateTime + "Z"),
     isAllDay: event.isAllDay,
-    source: "PORTAL" as const,
     lastSyncedAt: new Date(),
   };
 
@@ -214,7 +215,7 @@ async function handleCreatedOrUpdated(
   });
   const row = await db.booking.upsert({
     where: { graphICalUid: event.iCalUId },
-    create: data,
+    create: { ...data, source: "PORTAL" },
     update: data,
   });
   if (existing) {

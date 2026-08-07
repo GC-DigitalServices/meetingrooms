@@ -111,6 +111,9 @@ export async function syncMailbox(
     );
     const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
 
+    // `source` is intentionally NOT part of `data`: setting it on update would
+    // clobber an existing booking's IPAD_QR provenance (this sync only reads the
+    // OrganiserUpn extended property, not Source). It is defaulted on create only.
     const data = {
       graphEventId: event.id,
       graphICalUid: event.iCalUId,
@@ -121,7 +124,6 @@ export async function syncMailbox(
       startUtc: new Date(event.start.dateTime + "Z"),
       endUtc: new Date(event.end.dateTime + "Z"),
       isAllDay: event.isAllDay,
-      source: "PORTAL" as const,
       lastSyncedAt: new Date(),
     };
 
@@ -140,7 +142,7 @@ export async function syncMailbox(
         await db.booking.update({ where: { id: crossRoom.id }, data });
         updated++;
       } else {
-        await db.booking.create({ data });
+        await db.booking.create({ data: { ...data, source: "PORTAL" } });
         added++;
       }
     }
