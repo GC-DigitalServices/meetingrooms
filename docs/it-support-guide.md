@@ -234,19 +234,20 @@ The minibus checklist is attached only if one has been uploaded at
 
 ---
 
-## 12. Known limitations (as of 2026-08-06)
+## 12. Known behaviours (as of 2026-08-07)
 
-These are understood behaviours/bugs — don't burn time re-diagnosing them:
+These are intended behaviours — don't burn time re-diagnosing them:
 
 - **Role changes need a re-login** to take effect (roles are cached at sign-in).
-- **Booking lock TTL is short (5s):** under a very slow Graph write there's a
-  narrow theoretical double-booking window. On the backlog to harden.
-- **Recurring bookings** can shift ±1 hour across a DST change (Mar/Oct). On the
-  backlog.
-- **Portal clients don't auto-re-subscribe after a dropped socket** — a reload
-  restores live updates.
+- **Bookings are limited to 07:00–21:00** (Europe/London), enforced server-side —
+  a rejected out-of-hours booking is expected, not a fault. Minibuses are exempt
+  (multi-day/overnight hires).
 - **Minibus** bookers get an email confirmation, **not** an Outlook calendar entry
   (by design, like car-park bookings).
+
+_Fixed in the 2026-08-07 hardening pass (previously listed here): the 5s booking-lock
+double-booking window, recurring-booking DST drift, and portal live-views not
+re-subscribing after a socket reconnect._
 
 ---
 
