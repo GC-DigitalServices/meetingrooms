@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,8 +23,16 @@ export function RevokeButton({ deviceId, deviceLabel }: { deviceId: string; devi
   async function handleRevoke() {
     setLoading(true);
     try {
-      await fetch(`/api/devices/${deviceId}`, { method: "DELETE" });
-      router.refresh();
+      const res = await fetch(`/api/devices/${deviceId}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Display revoked");
+        router.refresh();
+      } else {
+        const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        toast.error(data?.error?.message ?? "Could not revoke this display");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
