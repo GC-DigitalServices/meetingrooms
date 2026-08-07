@@ -98,6 +98,7 @@ export default async function CarParkPage({
               isToday={isToday}
               canBook={canBook}
               dayStartMs={dayStart.getTime()}
+              selectedDate={selectedDate}
               initialBookings={rawBookings
                 .filter((b) => bayIdSet.has(b.roomId))
                 .map((b) => ({

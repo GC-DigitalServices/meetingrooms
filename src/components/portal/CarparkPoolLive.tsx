@@ -23,6 +23,8 @@ interface Props {
   canBook: boolean;
   /** UTC ms of London midnight on the selected date */
   dayStartMs: number;
+  /** The selected day as YYYY-MM-DD (London) — pre-fills the booking dialog */
+  selectedDate: string;
   initialBookings: PoolBooking[];
 }
 
@@ -58,6 +60,7 @@ export default function CarparkPoolLive({
   isToday,
   canBook,
   dayStartMs,
+  selectedDate,
   initialBookings,
 }: Props) {
   const { socket } = useSocket();
@@ -179,7 +182,9 @@ export default function CarparkPoolLive({
           </div>
         </div>
 
-        {canBook && <ParkingBookButton roomId={pool.id} roomName={pool.displayName} />}
+        {canBook && (
+          <ParkingBookButton roomId={pool.id} roomName={pool.displayName} filterDate={selectedDate} />
+        )}
       </div>
 
       {/* Slot availability grid */}
