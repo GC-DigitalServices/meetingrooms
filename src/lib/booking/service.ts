@@ -18,6 +18,7 @@ import {
 } from "@/lib/mailer";
 import { getConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { addLondonWeeks } from "@/lib/utils";
 import {
   publishBookingCreated,
   publishBookingUpdated,
@@ -506,9 +507,10 @@ export async function createRecurringBookings(
   const skipped: Date[] = [];
 
   for (let i = 0; i < input.repeatWeeks; i++) {
-    const offsetMs = i * 7 * 24 * 60 * 60 * 1000;
-    const start = new Date(input.start.getTime() + offsetMs);
-    const end   = new Date(input.end.getTime()   + offsetMs);
+    // Shift by whole weeks in Europe/London wall-clock so a 09:00 series stays
+    // 09:00 local across a DST change (a fixed 7×24h offset would drift ±1h).
+    const start = addLondonWeeks(input.start, i);
+    const end   = addLondonWeeks(input.end, i);
 
     try {
       const booking = await createBooking({ ...input, start, end, recurringGroupId: groupId });

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "r
 import RoomCard from "./RoomCard";
 import { computeRoomStatus } from "@/lib/booking/status";
 import { useSocket } from "@/lib/socket-context";
-import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
+import { localDateISO, timeToMinutes, minutesToTime, londonToUtc } from "@/lib/utils";
 import {
   freeUntilLabel,
   busyUntilLabel,
@@ -171,8 +171,8 @@ export default function RoomGrid({
     const seq = ++availSeq.current;
     setAvailLoading(true);
     try {
-      const from = new Date(`${filterDate}T${filterFrom}:00`).toISOString();
-      const to = new Date(`${filterDate}T${filterTo}:00`).toISOString();
+      const from = londonToUtc(filterDate, filterFrom).toISOString();
+      const to = londonToUtc(filterDate, filterTo).toISOString();
       const res = await fetch(
         `/api/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       );

@@ -65,3 +65,35 @@ export function londonDayStartUtc(date: string): Date {
   const hour = Number(LONDON_HOUR_FMT.format(utcMidnight)) % 24;
   return new Date(utcMidnight.getTime() - hour * 60 * 60 * 1000);
 }
+
+/**
+ * UTC instant for a wall-clock date + time in Europe/London.
+ * `date` is "YYYY-MM-DD", `time` is "HH:mm". London runs at a whole-hour offset
+ * (UTC+0 or +1), so we treat the wall-clock as UTC, measure the offset the
+ * resulting instant shows in London, and subtract it. Bookable hours never
+ * straddle the 01:00/02:00 DST switch, so the transition edge case can't bite.
+ */
+export function londonToUtc(date: string, time: string): Date {
+  const asUtc = new Date(`${date}T${time}:00Z`);
+  const shownHour = Number(LONDON_HOUR_FMT.format(asUtc)) % 24;
+  let offset = shownHour - asUtc.getUTCHours(); // whole hours; normalise day-wrap
+  if (offset > 12) offset -= 24;
+  if (offset < -12) offset += 24;
+  return new Date(asUtc.getTime() - offset * 60 * 60 * 1000);
+}
+
+/** Add whole days to a "YYYY-MM-DD" string (calendar arithmetic, tz-independent). */
+function addDaysISO(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Shift a UTC instant by N weeks while keeping the same Europe/London wall-clock
+ * time, so a weekly 09:00 booking stays 09:00 local across a DST change rather
+ * than drifting ±1h (as a fixed 7×24h offset would).
+ */
+export function addLondonWeeks(instant: Date, weeks: number): Date {
+  return londonToUtc(addDaysISO(localDateISO(instant), weeks * 7), localTime(instant));
+}

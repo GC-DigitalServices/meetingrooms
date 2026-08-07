@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { localDateISO, timeToMinutes, minutesToTime } from "@/lib/utils";
+import { localDateISO, timeToMinutes, minutesToTime, londonToUtc } from "@/lib/utils";
 import { overlaps } from "@/lib/booking/conflicts";
 import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "@/lib/booking/hours";
 
@@ -23,12 +23,12 @@ const TIME_OPTIONS = Array.from(
 );
 
 /**
- * Convert a date string (YYYY-MM-DD) and local time (HH:mm, Europe/London)
- * to a UTC ISO string. Assumes the user's browser is set to Europe/London,
- * which is expected for all managed school devices.
+ * Convert a date string (YYYY-MM-DD) and time (HH:mm) to a UTC ISO string,
+ * interpreting the input as Europe/London wall-clock regardless of the
+ * browser's own timezone.
  */
 function toUTC(date: string, time: string): string {
-  return new Date(`${date}T${time}:00`).toISOString();
+  return londonToUtc(date, time).toISOString();
 }
 
 function friendlyDate(date: string | Date): string {
