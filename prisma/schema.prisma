@@ -74,6 +74,7 @@ model Booking {
   isAllDay           Boolean       @default(false)
   source             BookingSource
   lastSyncedAt       DateTime      @default(now())
+  createdAt          DateTime      @default(now())
   recurringGroupId   String?
 
   // Phase 3: premises notifications
@@ -92,7 +93,7 @@ model Device {
   room        Room        @relation(fields: [roomId], references: [id])
   scope       DeviceScope
   pairingCode String?
-  tokenHash   String
+  tokenHash   String      @unique
   lastSeenAt  DateTime?
   enrolledAt  DateTime    @default(now())
   name        String?

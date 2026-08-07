@@ -13,7 +13,7 @@ vi.mock("@/lib/auth/session", () => ({
 
 vi.mock("@/lib/db/client", () => ({
   db: {
-    device: { findFirst: vi.fn() },
+    device: { findFirst: vi.fn(), findUnique: vi.fn() },
     room: { findMany: vi.fn() },
     booking: { findMany: vi.fn() },
     user: {
@@ -75,6 +75,7 @@ const TEST_BOOKING: Booking = {
   isAllDay: false,
   source: "PORTAL",
   lastSyncedAt: new Date(),
+  createdAt: new Date(),
   premisesNotes: null,
   premisesNotifyHash: null,
   primaryMailboxUpn: "room-a@school.ac.uk",

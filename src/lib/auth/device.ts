@@ -26,7 +26,7 @@ export async function requireDeviceAuth(req: NextRequest): Promise<DeviceWithRoo
   if (!token) throw new DeviceAuthError("Missing device token");
 
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const device = await db.device.findFirst({
+  const device = await db.device.findUnique({
     where: { tokenHash },
     include: { room: { include: { sections: true } } },
   });

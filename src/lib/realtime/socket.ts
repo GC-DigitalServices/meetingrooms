@@ -148,7 +148,7 @@ async function authenticatePortal(cookieHeader: string | undefined): Promise<Por
 
 async function authenticateDevice(token: string): Promise<DeviceClientData> {
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const device = await db.device.findFirst({
+  const device = await db.device.findUnique({
     where: { tokenHash },
     include: { room: true },
   });
