@@ -10,6 +10,8 @@ export interface GraphEvent {
   start: { dateTime: string; timeZone: string };
   end: { dateTime: string; timeZone: string };
   isAllDay: boolean;
+  /** Absent on older reads that did not $select it. */
+  type?: "singleInstance" | "occurrence" | "exception" | "seriesMaster";
   organizer: {
     emailAddress: { address: string; name: string };
   };

@@ -22,7 +22,7 @@ vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { resolveLogicalRoomId, syncMailbox } from "@/lib/graph/sync";
+import { resolveLogicalRoomId, syncMailbox, fetchSeriesOccurrences } from "@/lib/graph/sync";
 
 // Fixture: composite "comp1" has sections "s1" and "s2"; "std1" is standalone.
 const mailboxToRoomId = new Map([
@@ -307,5 +307,71 @@ describe("syncMailbox stale removal", () => {
     const spanDays = (end.getTime() - Date.now()) / DAY;
     expect(spanDays).toBeGreaterThan(89.9);
     expect(spanDays).toBeLessThan(90.1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recurring series expansion
+// ---------------------------------------------------------------------------
+// A Salamander timetable slot arrives as one recurring series. Graph notifies
+// us about the series master, whose start/end cover only the first lesson, so
+// the webhook expands the master into its occurrences instead of mirroring it.
+
+describe("fetchSeriesOccurrences", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    configMock.SYNC_WINDOW_DAYS = 370;
+  });
+
+  function occurrence(i: number) {
+    const start = new Date(Date.now() + i * 7 * DAY);
+    return {
+      id: `occ-${i}`,
+      // Each occurrence of a series has its own iCalUId, so each mirrors as an
+      // independent booking rather than collapsing onto one row.
+      iCalUId: `uid-occ-${i}`,
+      subject: "Computer Science (A2) F1",
+      start: { dateTime: start.toISOString().replace("Z", ""), timeZone: "UTC" },
+      end: { dateTime: start.toISOString().replace("Z", ""), timeZone: "UTC" },
+      isAllDay: false,
+      type: "occurrence" as const,
+      organizer: { emailAddress: { address: "m17@rooms.example.com", name: "M17" } },
+      attendees: [],
+    };
+  }
+
+  it("asks the master's instances endpoint for the whole sync window", async () => {
+    graphMock.getCalendar.mockResolvedValueOnce({ value: [occurrence(0)] });
+
+    await fetchSeriesOccurrences("m17@rooms.example.com", "master-1");
+
+    const url = graphMock.getCalendar.mock.calls[0][0] as string;
+    expect(url).toContain("/events/master-1/instances");
+    const end = new Date(decodeURIComponent(url.match(/endDateTime=([^&]+)/)![1]));
+    const spanDays = (end.getTime() - Date.now()) / DAY;
+    expect(spanDays).toBeGreaterThan(369.9);
+    expect(spanDays).toBeLessThan(370.1);
+  });
+
+  it("returns every occurrence, not just the first", async () => {
+    const weekly = Array.from({ length: 38 }, (_, i) => occurrence(i));
+    graphMock.getCalendar.mockResolvedValueOnce({ value: weekly });
+
+    const result = await fetchSeriesOccurrences("m17@rooms.example.com", "master-1");
+
+    expect(result).toHaveLength(38);
+    expect(new Set(result.map((o) => o.iCalUId)).size).toBe(38);
+  });
+
+  it("follows nextLink pagination", async () => {
+    graphMock.getCalendar
+      .mockResolvedValueOnce({ value: [occurrence(0)], "@odata.nextLink": "/next-page" })
+      .mockResolvedValueOnce({ value: [occurrence(1)] });
+
+    const result = await fetchSeriesOccurrences("m17@rooms.example.com", "master-1");
+
+    expect(result.map((o) => o.id)).toEqual(["occ-0", "occ-1"]);
+    expect(graphMock.getCalendar).toHaveBeenCalledTimes(2);
+    expect(graphMock.getCalendar.mock.calls[1][0]).toBe("/next-page");
   });
 });

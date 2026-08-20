@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { localDateISO, timeToMinutes, minutesToTime, londonToUtc } from "@/lib/utils";
 import { overlaps } from "@/lib/booking/conflicts";
 import { BOOKABLE_START_MIN, BOOKABLE_END_MIN, SLOT_STEP_MIN } from "@/lib/booking/hours";
+import { maxBookableDate } from "@/lib/booking/horizon";
 
 // Bookable hours in booking-slot steps (see lib/booking/hours.ts for the window)
 const TIME_OPTIONS = Array.from(
@@ -51,6 +52,8 @@ export interface BookingDialogProps {
   /** HH:mm pre-fill */
   initialStart?: string;
   initialEnd?: string;
+  /** Admins may book further ahead — see lib/booking/horizon.ts */
+  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
@@ -62,10 +65,6 @@ function minDate(): string {
   return today();
 }
 
-function maxDate(): string {
-  return localDateISO(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000));
-}
-
 export default function BookingDialog({
   open,
   onClose,
@@ -75,8 +74,10 @@ export default function BookingDialog({
   date,
   initialStart = "09:00",
   initialEnd = "09:30",
+  isAdmin = false,
   onSuccess,
 }: BookingDialogProps) {
+  const maxDate = () => maxBookableDate(isAdmin, roomKind);
   const [selectedDate, setSelectedDate] = useState(date ?? today());
   const [endDate, setEndDate] = useState(date ?? today());
   const [startTime, setStartTime] = useState(initialStart);
@@ -192,6 +193,21 @@ export default function BookingDialog({
       setEndTime(next.value);
     }
   }, [startTime, endTime, selectedDate, endDate]);
+
+  // Only offer week counts whose last occurrence stays inside the booking
+  // horizon — a 10-week series no longer fits inside 60 days, and offering a
+  // count the API is certain to reject is worse than not offering it.
+  const repeatWeekOptions = [2, 3, 4, 5, 6, 7, 8, 9, 10].filter((n) => {
+    const last = new Date(selectedDate + "T12:00:00");
+    last.setDate(last.getDate() + (n - 1) * 7);
+    return localDateISO(last) <= maxDate();
+  });
+  const maxRepeatWeeks = repeatWeekOptions[repeatWeekOptions.length - 1] ?? 0;
+
+  // Chosen date moved late enough that the selected week count no longer fits
+  useEffect(() => {
+    if (maxRepeatWeeks >= 2 && repeatWeeks > maxRepeatWeeks) setRepeatWeeks(maxRepeatWeeks);
+  }, [maxRepeatWeeks, repeatWeeks]);
 
   async function handleSubmit() {
     if (!isParking && !subject.trim()) {
@@ -579,8 +595,9 @@ export default function BookingDialog({
             </div>
           )}
 
-          {/* Repeat weekly — only for standard rooms */}
-          {!isMinibus && !isParking && (
+          {/* Repeat weekly — only for standard rooms, and only when at least a
+              2-week series fits inside the booking horizon */}
+          {!isMinibus && !isParking && maxRepeatWeeks >= 2 && (
             <div>
               <button
                 type="button"
@@ -616,7 +633,7 @@ export default function BookingDialog({
                       disabled={submitting}
                       onChange={(e) => setRepeatWeeks(Number(e.target.value))}
                     >
-                      {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      {repeatWeekOptions.map((n) => (
                         <option key={n} value={n}>
                           {n} weeks
                         </option>

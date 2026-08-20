@@ -76,6 +76,7 @@ interface Props {
   filterDate?: string;
   filterStart?: string;
   filterEnd?: string;
+  isAdmin?: boolean;
   isFavourite?: boolean;
   onToggleFavourite?: () => void;
   freeBayCount?: number;
@@ -114,6 +115,7 @@ export default function RoomCard({
   filterDate,
   filterStart,
   filterEnd,
+  isAdmin,
   isFavourite,
   onToggleFavourite,
   freeBayCount,
@@ -307,6 +309,7 @@ export default function RoomCard({
           date={filterDate}
           initialStart={filterStart}
           initialEnd={filterEnd}
+          isAdmin={isAdmin}
         />
       )}
     </>

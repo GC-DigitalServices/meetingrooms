@@ -15,6 +15,7 @@ export type ApiErrorCode =
   | "BOOKING_CONFLICT"
   | "ROOM_NOT_BOOKABLE"
   | "OUT_OF_HOURS"
+  | "BEYOND_HORIZON"
   | "LOCK_TIMEOUT"
   | "RATE_LIMITED"
   | "GRAPH_UNAVAILABLE"
@@ -28,6 +29,7 @@ const DEFAULT_STATUS: Record<ApiErrorCode, number> = {
   BOOKING_CONFLICT: 409,
   ROOM_NOT_BOOKABLE: 400,
   OUT_OF_HOURS: 400,
+  BEYOND_HORIZON: 400,
   LOCK_TIMEOUT: 503,
   RATE_LIMITED: 429,
   GRAPH_UNAVAILABLE: 503,
@@ -40,6 +42,7 @@ const DOMAIN_ERROR_CODES: Record<string, ApiErrorCode> = {
   ConflictError: "BOOKING_CONFLICT",
   NotOrganiserError: "FORBIDDEN",
   OutOfHoursError: "OUT_OF_HOURS",
+  BeyondHorizonError: "BEYOND_HORIZON",
   RoomNotBookableError: "ROOM_NOT_BOOKABLE",
   LockTimeoutError: "LOCK_TIMEOUT",
   GraphUnavailableError: "GRAPH_UNAVAILABLE",

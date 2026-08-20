@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { db } from "@/lib/db/client";
 import { graphClient } from "@/lib/graph/client";
 import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
-import { ORGANISER_UPN_PROP_ID } from "@/lib/graph/sync";
+import { ORGANISER_UPN_PROP_ID, EVENT_QUERY_FIELDS, fetchSeriesOccurrences } from "@/lib/graph/sync";
 import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import { apiError } from "@/lib/api/errors";
@@ -152,13 +152,46 @@ async function handleCreatedOrUpdated(
   sectionToParentId: Map<string, string>
 ): Promise<void> {
   const event = await graphClient.getCalendar<GraphEvent>(
-    `/users/${encodeURIComponent(mailboxUpn)}/events/${graphEventId}` +
-      `?$select=id,iCalUId,subject,start,end,isAllDay,organizer,attendees,singleValueExtendedProperties` +
-      `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')`
+    `/users/${encodeURIComponent(mailboxUpn)}/events/${graphEventId}?${EVENT_QUERY_FIELDS}`
   );
 
+  // A change to a recurring series notifies us about the series master, whose
+  // start/end are the first occurrence's. Mirroring that row would leave the
+  // rest of the series — a full year of timetabled lessons, for a Salamander
+  // booking — missing from the cache until the nightly resync, so the room
+  // would read as free for every lesson but the first. Mirror the occurrences
+  // instead; each has its own id and iCalUId. The master itself is never
+  // mirrored, so no phantom row is created for it.
+  if (event.type === "seriesMaster") {
+    const occurrences = await fetchSeriesOccurrences(mailboxUpn, event.id);
+    logger.info(
+      { graphEventId, occurrences: occurrences.length },
+      "webhook: series_master_expanded"
+    );
+    for (const occurrence of occurrences) {
+      await mirrorEvent(occurrence, fallbackRoomId, mailboxToRoomId, sectionToParentId);
+    }
+    return;
+  }
+
+  await mirrorEvent(event, fallbackRoomId, mailboxToRoomId, sectionToParentId);
+}
+
+/**
+ * Upserts one Graph event into the booking cache and broadcasts the change.
+ *
+ * Occurrences fetched from a series master may come back without an attendees
+ * collection; the logical room then falls back to the subscription's own room,
+ * which is what a single-room timetable series wants anyway.
+ */
+async function mirrorEvent(
+  event: GraphEvent,
+  fallbackRoomId: string,
+  mailboxToRoomId: Map<string, string>,
+  sectionToParentId: Map<string, string>
+): Promise<void> {
   // Resolve logical room from resource attendees.
-  const resourceUpns = event.attendees
+  const resourceUpns = (event.attendees ?? [])
     .filter((a) => a.type === "resource")
     .map((a) => a.emailAddress.address);
 
@@ -181,7 +214,7 @@ async function handleCreatedOrUpdated(
 
   // The Graph event's organizer field is the room mailbox (we write under app credentials),
   // not the real person. Resolve the real organiser name from the attendees list instead.
-  const organiserAttendee = event.attendees.find(
+  const organiserAttendee = (event.attendees ?? []).find(
     (a) => a.emailAddress.address.toLowerCase() === organiserUpn.toLowerCase()
   );
   const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
@@ -224,7 +257,7 @@ async function handleCreatedOrUpdated(
     );
   } else {
     publishBookingCreated(row, parentId).catch((err) =>
-      logger.warn({ err, graphEventId }, "ws: booking.created broadcast failed")
+      logger.warn({ err, graphEventId: event.id }, "ws: booking.created broadcast failed")
     );
   }
 }

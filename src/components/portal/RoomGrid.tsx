@@ -636,6 +636,7 @@ export default function RoomGrid({
                         filterDate={filterDate}
                         filterStart={filterFrom}
                         filterEnd={filterTo}
+                        isAdmin={isAdmin}
                         isFavourite={favourites.has(room.id)}
                         onToggleFavourite={() => toggleFavourite(room.id)}
                         freeBayCount={freeBayCount}

@@ -36,9 +36,12 @@ const EnvSchema = z.object({
 
   // How far ahead the nightly Graph→Postgres resync pulls calendar events.
   // Must cover the furthest-out bookings written to room mailboxes by external
-  // systems (exam timetables are published a term ahead), otherwise those rooms
-  // look free in the portal and can be double-booked.
-  SYNC_WINDOW_DAYS: z.coerce.number().int().positive().max(730).default(180),
+  // systems — Salamander populates the whole academic year — otherwise those
+  // rooms look free in the portal and can be double-booked.
+  // Keep this >= ADMIN_BOOKING_HORIZON_DAYS (lib/booking/horizon.ts): a room
+  // booked beyond the window is conflict-checked against a cache that cannot
+  // see externally-written timetable events.
+  SYNC_WINDOW_DAYS: z.coerce.number().int().positive().max(730).default(370),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

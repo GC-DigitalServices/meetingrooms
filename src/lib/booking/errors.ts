@@ -26,6 +26,13 @@ export class OutOfHoursError extends Error {
   }
 }
 
+export class BeyondHorizonError extends Error {
+  constructor(message = "Booking is too far in the future") {
+    super(message);
+    this.name = "BeyondHorizonError";
+  }
+}
+
 export class RoomNotBookableError extends Error {
   constructor(message = "Room is not available for booking") {
     super(message);

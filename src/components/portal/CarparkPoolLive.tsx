@@ -26,6 +26,7 @@ interface Props {
   /** The selected day as YYYY-MM-DD (London) — pre-fills the booking dialog */
   selectedDate: string;
   initialBookings: PoolBooking[];
+  isAdmin: boolean;
 }
 
 type Action =
@@ -62,6 +63,7 @@ export default function CarparkPoolLive({
   dayStartMs,
   selectedDate,
   initialBookings,
+  isAdmin,
 }: Props) {
   const { socket } = useSocket();
   const [bookings, dispatch] = useReducer(reducer, initialBookings);
@@ -183,7 +185,12 @@ export default function CarparkPoolLive({
         </div>
 
         {canBook && (
-          <ParkingBookButton roomId={pool.id} roomName={pool.displayName} filterDate={selectedDate} />
+          <ParkingBookButton
+            roomId={pool.id}
+            roomName={pool.displayName}
+            filterDate={selectedDate}
+            isAdmin={isAdmin}
+          />
         )}
       </div>
 

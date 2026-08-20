@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import MinibusClient from "./MinibusClient";
 import { CarparkDateNav } from "@/components/portal/CarparkDateNav";
 import { localDateISO, londonDayStartUtc } from "@/lib/utils";
+import { maxBookableDate } from "@/lib/booking/horizon";
 
 export const runtime = "nodejs";
 
@@ -19,8 +20,7 @@ export default async function MinibusPage({
 
   const now = new Date();
   const todayStr = localDateISO(now);
-  const [ty, tm, td] = todayStr.split("-").map(Number);
-  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
+  const maxDateStr = maxBookableDate(session.isAdmin, "MINIBUS", now);
 
   let selectedDate = todayStr;
   if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
@@ -117,6 +117,7 @@ export default async function MinibusPage({
         statusBookings={statusBookings}
         dayBookings={dayBookings}
         minibusIds={minibusIds}
+        isAdmin={session.isAdmin}
         isToday={isToday}
       />
     </div>

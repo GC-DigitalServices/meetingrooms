@@ -36,9 +36,10 @@ interface Props {
   dayBookings: StatusBooking[];
   minibusIds: string[];
   isToday: boolean;
+  isAdmin: boolean;
 }
 
-export default function MinibusClient({ minibuses, statusBookings, dayBookings, minibusIds, isToday }: Props) {
+export default function MinibusClient({ minibuses, statusBookings, dayBookings, minibusIds, isToday, isAdmin }: Props) {
   const [bookingTarget, setBookingTarget] = useState<Minibus | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; roomName: string } | null>(null);
   const [myBookings, setMyBookings] = useState<MyBooking[] | null>(null);
@@ -244,6 +245,7 @@ export default function MinibusClient({ minibuses, statusBookings, dayBookings, 
           roomId={bookingTarget.id}
           roomName={bookingTarget.displayName}
           roomKind="MINIBUS"
+          isAdmin={isAdmin}
           onSuccess={() => {
             setBookingTarget(null);
             void loadMyBookings();

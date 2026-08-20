@@ -8,6 +8,7 @@ import DayTimeline from "@/components/portal/DayTimeline";
 import { CarparkDateNav } from "@/components/portal/CarparkDateNav";
 import { Badge } from "@/components/ui/badge";
 import { localTime, localDateISO, londonDayStartUtc } from "@/lib/utils";
+import { maxBookableDate } from "@/lib/booking/horizon";
 import type { BookingSlot } from "@/hooks/useRoomLive";
 
 export const runtime = "nodejs";
@@ -41,12 +42,9 @@ export default async function RoomDetailPage({
 
   const now = new Date();
   const todayStr = localDateISO(now);
-  // Calendar-day arithmetic, not wall-clock ms — adding 90*24h drifts a day
-  // when the span crosses a DST transition near midnight
-  const [ty, tm, td] = todayStr.split("-").map(Number);
-  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
+  const maxDateStr = maxBookableDate(session.isAdmin, room.kind, now);
 
-  // Validate ?date param: YYYY-MM-DD within [today, today+90]. Parking pools
+  // Validate ?date param: YYYY-MM-DD within the booking horizon. Parking pools
   // are always shown for today — their own /carpark page handles date nav.
   let selectedDate = todayStr;
   if (room.kind !== "PARKING" && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {

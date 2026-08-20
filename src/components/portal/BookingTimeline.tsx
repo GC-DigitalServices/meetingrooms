@@ -130,6 +130,7 @@ export default function BookingTimeline({ room, initialBookings, canBook, viewer
           roomName={room.displayName}
           roomKind={room.kind}
           date={bookingDate}
+          isAdmin={isAdmin}
         />
       )}
 

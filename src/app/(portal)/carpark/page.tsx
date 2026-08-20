@@ -5,6 +5,7 @@ import { canUserBookRoom } from "@/lib/booking/permissions";
 import { CarparkDateNav } from "@/components/portal/CarparkDateNav";
 import CarparkPoolLive from "@/components/portal/CarparkPoolLive";
 import { localDateISO, londonDayStartUtc } from "@/lib/utils";
+import { maxBookableDate } from "@/lib/booking/horizon";
 
 export const runtime = "nodejs";
 
@@ -20,12 +21,9 @@ export default async function CarParkPage({
 
   const now = new Date();
   const todayStr = localDateISO(now);
-  // Calendar-day arithmetic, not wall-clock ms — adding 90*24h drifts a day
-  // when the span crosses a DST transition near midnight
-  const [ty, tm, td] = todayStr.split("-").map(Number);
-  const maxDateStr = localDateISO(new Date(Date.UTC(ty, tm - 1, td + 90)));
+  const maxDateStr = maxBookableDate(session.isAdmin, "PARKING", now);
 
-  // Validate date param: must be YYYY-MM-DD and within [today, today+90]
+  // Validate date param: must be YYYY-MM-DD and within the booking horizon
   let selectedDate = todayStr;
   if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
     if (dateParam >= todayStr && dateParam <= maxDateStr) {
@@ -99,6 +97,7 @@ export default async function CarParkPage({
               canBook={canBook}
               dayStartMs={dayStart.getTime()}
               selectedDate={selectedDate}
+              isAdmin={session.isAdmin}
               initialBookings={rawBookings
                 .filter((b) => bayIdSet.has(b.roomId))
                 .map((b) => ({

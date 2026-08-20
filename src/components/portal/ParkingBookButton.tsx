@@ -9,9 +9,10 @@ interface Props {
   initialStart?: string;
   initialEnd?: string;
   filterDate?: string;
+  isAdmin?: boolean;
 }
 
-export function ParkingBookButton({ roomId, roomName, initialStart, initialEnd, filterDate }: Props) {
+export function ParkingBookButton({ roomId, roomName, initialStart, initialEnd, filterDate, isAdmin }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,6 +34,7 @@ export function ParkingBookButton({ roomId, roomName, initialStart, initialEnd, 
         date={filterDate}
         initialStart={initialStart}
         initialEnd={initialEnd}
+        isAdmin={isAdmin}
       />
     </>
   );

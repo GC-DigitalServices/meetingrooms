@@ -356,6 +356,7 @@ export default function DayTimeline({
           date={bookingSlot.date}
           initialStart={bookingSlot.start}
           initialEnd={bookingSlot.end}
+          isAdmin={isAdmin}
         />
       )}
       {cancelTarget && (

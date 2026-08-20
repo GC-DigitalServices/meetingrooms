@@ -3,8 +3,9 @@ import { canUserBookRoom, wouldPassWithoutAdmin } from "./permissions";
 import { findConflict } from "./conflicts";
 import { snapToSlot, validateDuration } from "./duration";
 import { isWithinBookableHours } from "./hours";
+import { isWithinBookingHorizon, horizonDays } from "./horizon";
 import { resolveBookingMailboxes, bookingLockKey } from "./mailboxes";
-import { ConflictError, NotOrganiserError, GraphUnavailableError, RoomNotBookableError, OutOfHoursError } from "./errors";
+import { ConflictError, NotOrganiserError, GraphUnavailableError, RoomNotBookableError, OutOfHoursError, BeyondHorizonError } from "./errors";
 import { isGraphDegraded, markGraphDegraded, clearGraphDegraded } from "./graph-health";
 import { withLock } from "@/lib/realtime/lock";
 import { createGraphEvent, updateGraphEvent, deleteGraphEvent } from "@/lib/graph/events";
@@ -121,6 +122,13 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   if (room.kind !== "MINIBUS") validateDuration(start, end);
   // Enforce operating hours server-side (the client dropdowns are not trusted).
   if (!isWithinBookableHours(room.kind, start, end)) throw new OutOfHoursError();
+  // Enforce the booking horizon server-side for the same reason: the date
+  // pickers' `max` attribute is a hint, not a limit. Admins get a longer one.
+  if (!isWithinBookingHorizon(input.actor.isAdmin, room.kind, start)) {
+    throw new BeyondHorizonError(
+      `Bookings can be made up to ${horizonDays(input.actor.isAdmin, room.kind)} days ahead.`
+    );
+  }
 
   if (room.kind === "MINIBUS" && !input.premisesNotes?.trim()) {
     throw new RoomNotBookableError("Destination, passengers and driver are required for minibus bookings.");
@@ -324,6 +332,11 @@ export async function updateBooking(
   // MINIBUS hires can span multiple days — same duration-cap bypass as createBooking.
   if (room.kind !== "MINIBUS") validateDuration(newStart, newEnd);
   if (!isWithinBookableHours(room.kind, newStart, newEnd)) throw new OutOfHoursError();
+  if (!isWithinBookingHorizon(input.actor.isAdmin, room.kind, newStart)) {
+    throw new BeyondHorizonError(
+      `Bookings can be moved up to ${horizonDays(input.actor.isAdmin, room.kind)} days ahead.`
+    );
+  }
 
   const primaryMbox = existing.primaryMailboxUpn ?? room.mailboxUpn!;
   const roomIds     = await familyRoomIds(room);
@@ -513,6 +526,20 @@ export async function createRecurringBookings(
   const groupId = crypto.randomUUID();
   const created: Booking[] = [];
   const skipped: Date[] = [];
+
+  // Check the last occurrence before writing anything — createBooking would
+  // otherwise create the early weeks and then throw partway through the series.
+  const { kind } = await db.room.findUniqueOrThrow({
+    where: { id: input.roomId },
+    select: { kind: true },
+  });
+  const lastStart = addLondonWeeks(input.start, input.repeatWeeks - 1);
+  if (!isWithinBookingHorizon(input.actor.isAdmin, kind, lastStart)) {
+    throw new BeyondHorizonError(
+      `The last of these ${input.repeatWeeks} weekly bookings falls beyond the ` +
+        `${horizonDays(input.actor.isAdmin, kind)} days ahead you can book. Choose fewer weeks or an earlier start.`
+    );
+  }
 
   for (let i = 0; i < input.repeatWeeks; i++) {
     // Shift by whole weeks in Europe/London wall-clock so a 09:00 series stays

@@ -9,6 +9,13 @@ import { logger } from "@/lib/logger";
 export const ORGANISER_UPN_PROP_ID =
   "String {00000000-0000-0000-0000-000000000001} Name OrganiserUpn";
 
+// The $select/$expand shared by every event read, so the two call sites (this
+// resync and the webhook handler) cannot drift apart on which fields they ask
+// for. `type` distinguishes a series master from a single event or occurrence.
+export const EVENT_QUERY_FIELDS =
+  `$select=id,iCalUId,subject,start,end,isAllDay,type,organizer,attendees,singleValueExtendedProperties` +
+  `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')`;
+
 // ---------------------------------------------------------------------------
 // Composite room resolution
 // ---------------------------------------------------------------------------
@@ -37,6 +44,44 @@ export function resolveLogicalRoomId(
 }
 
 // ---------------------------------------------------------------------------
+// Recurring series
+// ---------------------------------------------------------------------------
+
+/**
+ * The occurrences of a recurring series that fall inside the sync window.
+ *
+ * Graph fires change notifications for a series against the series master,
+ * whose start and end are those of the *first* occurrence only. Mirroring the
+ * master would leave every other occurrence — a whole year of timetabled
+ * lessons, for a Salamander series — missing from the cache until the nightly
+ * resync. Each occurrence returned here carries its own id and its own
+ * iCalUId, so each mirrors as an independent booking row.
+ */
+export async function fetchSeriesOccurrences(
+  mailboxUpn: string,
+  seriesMasterId: string,
+): Promise<GraphEvent[]> {
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + getConfig().SYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const occurrences: GraphEvent[] = [];
+  let url =
+    `/users/${encodeURIComponent(mailboxUpn)}/events/${encodeURIComponent(seriesMasterId)}/instances` +
+    `?startDateTime=${now.toISOString()}` +
+    `&endDateTime=${windowEnd.toISOString()}` +
+    `&$top=250` +
+    `&${EVENT_QUERY_FIELDS}`;
+
+  while (url) {
+    const page = await graphClient.getCalendar<GraphCalendarViewResponse>(url);
+    occurrences.push(...page.value);
+    url = page["@odata.nextLink"] ?? "";
+  }
+
+  return occurrences;
+}
+
+// ---------------------------------------------------------------------------
 // Sync a single mailbox
 // ---------------------------------------------------------------------------
 
@@ -55,8 +100,7 @@ export async function syncMailbox(
     `/users/${encodeURIComponent(mailboxUpn)}/calendarView` +
     `?startDateTime=${now.toISOString()}` +
     `&endDateTime=${windowEnd.toISOString()}` +
-    `&$select=id,iCalUId,subject,start,end,isAllDay,organizer,attendees,singleValueExtendedProperties` +
-    `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')`;
+    `&${EVENT_QUERY_FIELDS}`;
 
   while (url) {
     const page = await graphClient.getCalendar<GraphCalendarViewResponse>(url);
