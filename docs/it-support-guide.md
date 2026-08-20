@@ -68,7 +68,7 @@ Rollback and deploy details: `docs/runbooks/rolling-deploy-and-rollback.md`.
 | `SESSION_SECRET`, `QR_SIGNING_KEY` | Signing keys (≥32 chars) |
 | `PUBLIC_BASE_URL` | Canonical public URL — redirects, webhooks, QR links |
 | `MAIL_SENDER_UPN` | Mailbox that sends notification emails (`noreply@greenhead.ac.uk`) |
-| `SYNC_WINDOW_DAYS` | How far ahead the nightly resync pulls events (default 180) |
+| `SYNC_WINDOW_DAYS` | How far ahead the nightly resync pulls events (default 370). Must stay at or above the admin room booking horizon (365) — see `src/lib/booking/horizon.ts` |
 | `PORT` | Defaults to 3000 |
 
 Missing/invalid required vars make the app **fail loudly on boot** — check Railway

@@ -7,10 +7,12 @@ node_modules/
 out/
 next-env.d.ts
 
-# Env files — never commit secrets
+# Env files — never commit secrets.
+# Broad match with an explicit exception, so .env.production (and anything else
+# added later) can't slip through the way a fixed list would.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Prisma
 # migrations/ is intentionally tracked

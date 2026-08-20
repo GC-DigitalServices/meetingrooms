@@ -14,7 +14,7 @@ Working rules. `build.md` is the source of truth — if it conflicts with this f
 
 
 
-2\. \*\*Our app is the only writer to room mailboxes.\*\* Enforced by `AllBookInPolicy = $false` + empty `BookInPolicy` on each mailbox. Consequence: the Graph `organizer` is the room mailbox, not the human. The real organiser lives in `Booking.organiserUpn`, the `OrganiserUpn` extended property, the subject prefix, and the attendee list. \*\*Never\*\* read Graph `organizer` to identify who booked.
+2\. \*\*Our app is the only writer to room mailboxes — except Salamander.\*\* `AllBookInPolicy = $false` + empty `BookInPolicy` stops any \*user\* booking a room outside the portal. It does not stop an app writing with its own credentials, and the Salamander MIS does exactly that: it publishes the whole academic year of timetable straight into the room mailboxes as recurring series. Consequences: (a) the Graph `organizer` is the room mailbox, not the human — the real organiser lives in `Booking.organiserUpn`, the `OrganiserUpn` extended property, the subject prefix, and the attendee list, so \*\*never\*\* read Graph `organizer` to identify who booked; (b) our cache is only as complete as what we mirror from Exchange, which is what couples `SYNC_WINDOW_DAYS` to the booking horizon (see 6 below); (c) Salamander can double-book on top of a portal booking — Exchange accepts overlapping direct writes — and nothing currently detects or reports that.
 
 
 
@@ -30,6 +30,10 @@ Working rules. `build.md` is the source of truth — if it conflicts with this f
 
 
 
+6\. \*\*`SYNC_WINDOW_DAYS` >= the admin room horizon.\*\* Currently 370 vs 365 (`lib/booking/horizon.ts`). The conflict check reads the cache, and the cache only mirrors Salamander's timetable as far out as the sync window — book a room beyond it and the check is blind. Minibus and visitor parking are exempt (360 days) because nothing outside this app writes to those mailboxes. Raise one without the other and rooms can be silently double-booked.
+
+
+
 \## Booking write path — the only safe order
 
 
@@ -38,7 +42,7 @@ Working rules. `build.md` is the source of truth — if it conflicts with this f
 
 2\. Acquire Redis lock. Key: `lock:room:<familyRootId>` — for a SECTION that's `parentRoomId`; for STANDARD/COMPOSITE it's the room's own id. Always lock the family root.
 
-3\. Conflict check against cache (reliable inside the lock, because we're the only writer).
+3\. Conflict check against cache (the lock makes it reliable against \*our\* concurrent writes; against Salamander it is only as good as what the webhook and nightly resync have mirrored).
 
 4\. Graph write (one event with all section mailboxes as resources for composite bookings — not N events, no verification poll).
 
@@ -53,6 +57,30 @@ Working rules. `build.md` is the source of truth — if it conflicts with this f
 
 
 Graph failure after lock acquired: release, surface error, no DB write, no broadcast.
+
+
+
+\## Booking horizon
+
+
+
+`lib/booking/horizon.ts` is the single source of truth. Enforced server-side in `createBooking`/`updateBooking` (`BeyondHorizonError` -> 400 `BEYOND_HORIZON`) and mirrored by the date pickers and date navigation — the `max` attribute is a hint, never the limit.
+
+
+
+```
+
+everyone      60 days, every room kind
+
+admin         365 days on rooms (must stay <= sync window, invariant 6)
+
+admin         360 days on MINIBUS and PARKING
+
+```
+
+
+
+`createRecurringBookings` validates the \*last\* occurrence up front so a too-long series is rejected whole rather than part-created.
 
 
 

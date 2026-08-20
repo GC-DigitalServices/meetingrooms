@@ -13,6 +13,11 @@ car-park bays through the website. Small iPad screens outside rooms show whether
 each room is free or busy. As an administrator you can manage rooms, tidy up
 bookings, look after the iPad displays, and check that everything's healthy.
 
+You can also book further ahead than everyone else. Ordinary users can book up
+to 60 days in advance; as an administrator you can book a room up to a year
+ahead, and a minibus or visitor bay up to 360 days ahead. The date picker will
+simply let you pick those later dates — there's nothing extra to switch on.
+
 ## Signing in
 
 Go to the booking website and sign in with your college Microsoft account — the

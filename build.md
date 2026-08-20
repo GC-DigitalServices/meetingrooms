@@ -11,7 +11,7 @@ Technical design for the Room Booking Platform. This document is the architectur
 - Some rooms are partitionable — bookable either as a whole or as one of several sections
 - iPad displays outside rooms show live status and let users initiate a booking by scanning a QR code with their phone
 - Updates propagate to all surfaces within a few seconds of any change
-- Our portal is the only path that books rooms — Outlook and Teams cannot book rooms directly. This is enforced at the Exchange mailbox level
+- Our portal is the only path by which *people* book rooms — Outlook and Teams cannot book rooms directly. This is enforced at the Exchange mailbox level. The Salamander MIS is the one exception: it writes the timetable straight into the room mailboxes under its own credentials (see "The second writer: Salamander" in §2)
 
 ### Non-goals (for MVP)
 
@@ -19,7 +19,7 @@ Technical design for the Room Booking Platform. This document is the architectur
 - Recurring booking creation from our UI — these are uncommon at this scale and can be added later if needed
 - Public-facing booking — internal only
 - Catering, AV setup requests, or other adjunct services
-- Integration with the timetable / MIS
+- Integration with the timetable / MIS — we neither read from nor write to Salamander. It writes to the room mailboxes independently and we mirror what lands there (see "The second writer: Salamander" in §2)
 
 ### Scale
 
@@ -70,7 +70,19 @@ The system is sized for roughly 20-50 rooms and up to ~1,500 staff and students 
                                                 (PWA, QR code)
 ```
 
-The application runs on Railway as a single service, with Railway-managed Postgres and Redis attached. Microsoft 365 is the only external integration: Entra ID for authentication, Exchange for the room calendars themselves. Our app is the only writer to the room mailboxes — Exchange is configured to reject any other write — and it owns the policy for who can book what.
+The application runs on Railway as a single service, with Railway-managed Postgres and Redis attached. Microsoft 365 is the only external integration: Entra ID for authentication, Exchange for the room calendars themselves. Our app owns the policy for who can book what, and Exchange is configured so that no *user* can book a room outside the portal.
+
+### The second writer: Salamander
+
+The Salamander MIS writes the timetable directly into the room mailboxes using its own credentials. Like our app, it writes under application permissions and so bypasses the resource booking attendant that the mailbox lockdown relies on. This is a standing fact about the system, not an anomaly:
+
+- **It publishes the whole academic year** at the start of term, as recurring series (one series per timetabled slot).
+- **It cannot overwrite a portal booking.** Exchange accepts overlapping direct writes rather than rejecting them, so a clash becomes two overlapping events on the same calendar. Nothing in this system currently detects that clash or notifies either party.
+- **Its events reach our cache** through the Graph webhook and the nightly resync, the same as our own. They carry none of our extended properties, so `organiserUpn` falls back to the room mailbox itself and `source` is recorded as `PORTAL`. Timetabled lessons therefore appear as bookings organised by the room.
+- **Visibility falls out of that.** A room mailbox is never a signed-in `User`, so `organiserIsStaff` is false and `bookingDetailVisibility` returns `"busy"` — lesson subjects are hidden from everyone but admins, which happens to satisfy the student-data rule in §8, but staff also see unlabelled "Busy" blocks with no indication a lesson is timetabled.
+- **The conflict check is only as complete as the sync window.** See §6.
+
+Consequently `SYNC_WINDOW_DAYS` (370) must stay at or above the admin room booking horizon (365, `lib/booking/horizon.ts`).
 
 ## 3. Data model
 
@@ -301,7 +313,7 @@ We subscribe one Graph subscription per room mailbox on its `events` resource. E
 - Expires after ~4230 minutes (Graph's max for calendar resources)
 - Is renewed by a cron job that runs every 6 hours
 
-Since our app is the only writer, the webhook is mostly a safety net — it confirms our writes landed, and it catches the rare case where an admin makes a manual change in Exchange. We still process notifications defensively. Notifications are lightweight; we fetch the event details from Graph and update our cache.
+The webhook confirms our own writes landed, and it is the only near-real-time path by which Salamander's timetable writes reach our cache — so it is load-bearing, not merely a safety net. Notifications are lightweight; we fetch the event details from Graph and update our cache. A recurring series notifies us about its *series master*, whose start/end are the first occurrence's only, so `handleCreatedOrUpdated` expands a master into its occurrences and mirrors each (`fetchSeriesOccurrences`); the master itself is never mirrored.
 
 Composite-room bookings appear as one Graph event on each invited section mailbox (same `iCalUId`, different per-mailbox event ids). We dedupe on `iCalUId` so a composite booking results in exactly one `Booking` row in our database. Section subscriptions exist per section mailbox; the composite has no mailbox and no subscription of its own.
 
@@ -471,8 +483,9 @@ async function createBooking(input: BookingInput, user: SessionUser): Promise<Bo
 
 Key points:
 
+- **How far ahead you may book is policy, not a form hint.** `lib/booking/horizon.ts` is the single source of truth, enforced in `createBooking`/`updateBooking` (400 `BEYOND_HORIZON`) and mirrored by the date pickers and date navigation: 60 days for everyone, 365 for admins on rooms, 360 for admins on minibus and visitor parking. Minibus and parking may exceed the sync window because nothing outside this app writes to those mailboxes; rooms may not, because Salamander does.
 - **The permission check is ours, not Exchange's.** Exchange will accept any write our app makes — it has no knowledge of `allowedGroups`. The portal is the gate.
-- **We are the only writer.** This means our cache is sufficient for the conflict check; nothing else has touched the mailbox between our read and our write, because the lock serialises our own concurrent attempts. (The webhook handler is the safety-net for the unlikely case that someone with mailbox admin privileges makes a change in Exchange directly.)
+- **We are the only writer *we* serialise.** The lock serialises our own concurrent attempts, so no portal booking can race another. The cache is sufficient for the conflict check only to the extent it mirrors the other writer: Salamander writes the timetable directly to room mailboxes, and those events reach the cache via the webhook and the nightly resync. This is why `SYNC_WINDOW_DAYS` must stay >= the admin room horizon (`lib/booking/horizon.ts`) — a room booked beyond the window would be checked against a cache that cannot see what the timetable already claimed.
 - **Composite bookings are one Graph event, not N.** A single event with multiple invited resources. Exchange auto-accepts each resource. No verification-and-rollback dance is needed because no other writer can race us.
 - **The actor is always a real authenticated user.** The application credentials are how we *write to Exchange* but they are not the *organiser*. The organiser is the signed-in person; the audit log proves it.
 
@@ -626,7 +639,7 @@ Daily life: an admin glances at the dashboard tile in the portal admin section (
 - Rate limits: 5 booking creations per user per minute; 100 reads per user per minute; 60 QR-token mints per device per hour.
 - Audit log is append-only — no UI exposes delete or update on audit rows.
 - The Application Access Policy is the security boundary that limits our app's blast radius to room mailboxes.
-- The room mailbox lockdown (`AllBookInPolicy = $false`) is the boundary that enforces "portal is the only writer."
+- The room mailbox lockdown (`AllBookInPolicy = $false`) is the boundary that stops *users* booking rooms outside the portal. It does not stop an application writing with its own credentials — Salamander does exactly that, as we do.
 
 ### Retention
 
