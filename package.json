@@ -14,7 +14,8 @@
     "prepare": "husky",
     "smoke": "tsx scripts/graph-smoke.ts",
     "rooms:import": "tsx scripts/rooms-import.ts",
-    "ws:harness": "tsx scripts/ws-harness.ts"
+    "ws:harness": "tsx scripts/ws-harness.ts",
+    "diag:room": "tsx scripts/diag-room-day.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^2.16.2",

@@ -34,7 +34,13 @@ pnpm vitest run -t "rejects beyond horizon"
 pnpm playwright test e2e/accessibility.spec.ts
 ```
 
+```bash
+pnpm diag:room <room-upn> <YYYY-MM-DD>   # Exchange vs cache, side by side, for one room-day
+```
+
 CI (`.github/workflows/ci.yml`) runs `pnpm audit --audit-level=high`, gitleaks, `prisma generate`, typecheck, lint, test. Match it locally before pushing. Health check: `GET /api/health`.
+
+**Deployment is push-to-`main`.** Railway watches `main` only — a feature branch push deploys nothing. `railway.toml` builds `pnpm prisma generate && pnpm build`, then starts `pnpm prisma migrate deploy && pnpm start`, so **migrations run at container start, not build**: a bad migration fails the `/api/health` check rather than the build, and Railway retries 3 times before giving up.
 
 **`pnpm dev` runs a custom server, not `next dev`.** `server.ts` boots Next programmatically and attaches Socket.IO to the same HTTP server (invariant 5). Anything touching WebSockets must be exercised through `pnpm dev`. `src/instrumentation.ts` starts `src/lib/cron.ts` in the same process — subscription renewal (6h), full resync (02:00), device heartbeat check (15min) — so cron runs in dev too.
 
@@ -42,7 +48,11 @@ CI (`.github/workflows/ci.yml`) runs `pnpm audit --audit-level=high`, gitleaks, 
 
 1. **Exchange is the source of truth; Postgres is a cache.** Every mutation goes through Graph first, then Postgres. Never write to Postgres without a Graph call. (Exceptions — original data we own: rooms, devices, users, audit, sessions, managed files.)
 
-2. **Our app is the only writer to room mailboxes — except Salamander.** `AllBookInPolicy = $false` + empty `BookInPolicy` stops any *user* booking a room outside the portal. It does not stop an app writing with its own credentials, and the Salamander MIS does exactly that: it publishes the whole academic year of timetable straight into the room mailboxes as recurring series. Consequences: (a) the Graph `organizer` is the room mailbox, not the human — the real organiser lives in `Booking.organiserUpn`, the `OrganiserUpn` extended property, the subject prefix, and the attendee list, so **never** read Graph `organizer` to identify who booked; (b) our cache is only as complete as what we mirror from Exchange, which is what couples `SYNC_WINDOW_DAYS` to the booking horizon (see 6 below); (c) Salamander can double-book on top of a portal booking — Exchange accepts overlapping direct writes — and nothing currently detects or reports that.
+2. **Our app is the only writer to room mailboxes — except Salamander.** `AllBookInPolicy = $false` + empty `BookInPolicy` stops any *user* booking a room outside the portal. It does not stop an app writing with its own credentials, and the Salamander MIS does exactly that: it publishes the whole academic year of timetable straight into the room mailboxes. Its output is not uniform and must not be assumed well-formed: as well as recurring series, it has published a term of a weekly lesson as **one continuous event** (14 Sep 12:35 → 14 Dec 13:35), which Exchange holds as the room being busy every hour of every day in between. Consequences: (a) the Graph `organizer` is the room mailbox, not the human — the real organiser lives in `Booking.organiserUpn`, the `OrganiserUpn` extended property, the subject prefix, and the attendee list, so **never** read Graph `organizer` to identify who booked; (b) our cache is only as complete as what we mirror from Exchange, which is what couples `SYNC_WINDOW_DAYS` to the booking horizon (see 6 below); (c) Salamander can double-book on top of a portal booking — Exchange accepts overlapping direct writes — and nothing currently detects or reports that.
+
+   Telling its events from ours: our writes carry a `Source` extended property, read back by `resolveBookingSource` into `Booking.source`. No property means `EXCHANGE` — written straight to the mailbox by something else. `SELECT * FROM "Booking" WHERE source = 'EXCHANGE'` is the inventory of what we did not write. `reportIfOverlong` additionally warns (`graph: overlong_room_booking`) on any non-MINIBUS booking over the 8h write-path cap, which is how the term-long blocks surface.
+
+   **Report, never filter.** Bad Salamander data still mirrors: the room really is blocked in Exchange, so the conflict check must keep seeing it. Dropping or shortening such a row hands out bookings Exchange then rejects — an invisible booking fault traded for a visible display one. Fix it at source (delete the events, have Salamander republish); a webhook `deleted` clears the cache immediately.
 
 3. **All Graph calls use application credentials.** The delegated token is used exactly twice at sign-in (`/me`, `/me/transitiveMemberOf`) then discarded. No refresh tokens stored.
 

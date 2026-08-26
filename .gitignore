@@ -27,6 +27,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code — settings.local.json is a per-machine permission allowlist with
+# absolute paths from one user profile. .claude/ itself stays tracked.
+.claude/settings.local.json
+
 # Logs
 *.log
 pino-*.ndjson
