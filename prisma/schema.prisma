@@ -23,6 +23,8 @@ enum RoomKind {
 enum BookingSource {
   PORTAL
   IPAD_QR
+  // Mirrored from a room mailbox but not written by us — in practice Salamander.
+  EXCHANGE
 }
 
 enum DeviceScope {

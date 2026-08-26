@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { snapToSlot, validateDuration } from "./duration";
+import { snapToSlot, validateDuration, isOverlongRoomBooking } from "./duration";
 
 function mins(n: number) { return n * 60_000; }
 
@@ -55,5 +55,39 @@ describe("validateDuration", () => {
 
   it("throws when end is before start", () => {
     expect(() => validateDuration(base, at(-mins(30)))).toThrow();
+  });
+});
+
+describe("isOverlongRoomBooking", () => {
+  const base = new Date("2026-09-15T09:00:00.000Z");
+  const at = (ms: number) => new Date(base.getTime() + ms);
+
+  it("is false for a typical lesson", () => {
+    expect(isOverlongRoomBooking("STANDARD", base, at(mins(60)))).toBe(false);
+  });
+
+  it("is false at exactly the 8-hour cap", () => {
+    expect(isOverlongRoomBooking("STANDARD", base, at(mins(480)))).toBe(false);
+  });
+
+  it("is true one minute past the cap", () => {
+    expect(isOverlongRoomBooking("STANDARD", base, at(mins(481)))).toBe(true);
+  });
+
+  it("catches a term-long Salamander block", () => {
+    // The real case: one weekly lesson published as a single continuous event
+    // running 14 Sep 12:35 → 14 Dec 13:35, which blocks the room for 3 months.
+    const start = new Date("2026-09-14T11:35:00.000Z");
+    const end = new Date("2026-12-14T13:35:00.000Z");
+    expect(isOverlongRoomBooking("STANDARD", start, end)).toBe(true);
+  });
+
+  it("applies to sections and composites", () => {
+    expect(isOverlongRoomBooking("SECTION", base, at(mins(600)))).toBe(true);
+    expect(isOverlongRoomBooking("COMPOSITE", base, at(mins(600)))).toBe(true);
+  });
+
+  it("exempts MINIBUS, where multi-day hires are legitimate", () => {
+    expect(isOverlongRoomBooking("MINIBUS", base, at(mins(3 * 24 * 60)))).toBe(false);
   });
 });

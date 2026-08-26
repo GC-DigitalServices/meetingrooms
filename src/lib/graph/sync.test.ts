@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Prevent module-level db/graphClient initialisations from failing in tests.
-const { dbMock, graphMock, configMock } = vi.hoisted(() => ({
+const { dbMock, graphMock, configMock, loggerMock } = vi.hoisted(() => ({
   dbMock: {
     booking: {
       findMany: vi.fn(),
@@ -13,16 +13,23 @@ const { dbMock, graphMock, configMock } = vi.hoisted(() => ({
   },
   graphMock: { getCalendar: vi.fn() },
   configMock: { SYNC_WINDOW_DAYS: 180 },
+  loggerMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock("@/lib/db/client", () => ({ db: dbMock }));
 vi.mock("@/lib/graph/client", () => ({ graphClient: graphMock }));
 vi.mock("@/lib/config", () => ({ getConfig: () => configMock }));
-vi.mock("@/lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("@/lib/logger", () => ({ logger: loggerMock }));
 
-import { resolveLogicalRoomId, syncMailbox, fetchSeriesOccurrences } from "@/lib/graph/sync";
+import {
+  resolveLogicalRoomId,
+  syncMailbox,
+  fetchSeriesOccurrences,
+  resolveBookingSource,
+  SOURCE_PROP_ID,
+  EVENT_QUERY_FIELDS,
+} from "@/lib/graph/sync";
+import type { GraphEvent } from "@/lib/graph/types";
 
 // Fixture: composite "comp1" has sections "s1" and "s2"; "std1" is standalone.
 const mailboxToRoomId = new Map([
@@ -215,7 +222,7 @@ interface DeleteManyArg {
   where?: { graphICalUid?: { in?: string[] } };
 }
 
-async function runSync(rows: Fixture[], present: Fixture[]) {
+async function runSync(rows: Fixture[], present: Fixture[], roomKind = "STANDARD") {
   dbMock.booking.findMany.mockImplementation(async ({ where }: { where: BookingWhere }) =>
     rows
       .filter(
@@ -231,6 +238,7 @@ async function runSync(rows: Fixture[], present: Fixture[]) {
   const stats = await syncMailbox(
     "std1@rooms.example.com",
     "std1",
+    roomKind,
     new Map([["std1@rooms.example.com", "std1"]]),
     new Map(),
   );
@@ -373,5 +381,153 @@ describe("fetchSeriesOccurrences", () => {
     expect(result.map((o) => o.id)).toEqual(["occ-0", "occ-1"]);
     expect(graphMock.getCalendar).toHaveBeenCalledTimes(2);
     expect(graphMock.getCalendar.mock.calls[1][0]).toBe("/next-page");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Provenance and implausible-duration reporting
+// ---------------------------------------------------------------------------
+// Salamander writes straight to room mailboxes (invariant 2), so not every
+// mirrored event is one of ours. Everything synced used to be stamped PORTAL,
+// which made bad MIS data indistinguishable from a real portal booking.
+
+/** A Graph event with arbitrary times and extended properties. */
+function eventWith(
+  start: string,
+  end: string,
+  singleValueExtendedProperties: Array<{ id: string; value: string }> = [],
+): GraphEvent {
+  return {
+    id: "event-1",
+    iCalUId: "uid-1",
+    subject: "Computer Science (A2) F1",
+    start: { dateTime: start, timeZone: "UTC" },
+    end: { dateTime: end, timeZone: "UTC" },
+    isAllDay: false,
+    organizer: { emailAddress: { address: "std1@rooms.example.com", name: "Room 1" } },
+    attendees: [],
+    singleValueExtendedProperties,
+  };
+}
+
+describe("resolveBookingSource", () => {
+  it("reads PORTAL from the Source extended property", () => {
+    expect(
+      resolveBookingSource(eventWith("x", "y", [{ id: SOURCE_PROP_ID, value: "PORTAL" }])),
+    ).toBe("PORTAL");
+  });
+
+  it("reads IPAD_QR from the Source extended property", () => {
+    expect(
+      resolveBookingSource(eventWith("x", "y", [{ id: SOURCE_PROP_ID, value: "IPAD_QR" }])),
+    ).toBe("IPAD_QR");
+  });
+
+  it("returns EXCHANGE when the property is absent — nothing we wrote", () => {
+    expect(resolveBookingSource(eventWith("x", "y"))).toBe("EXCHANGE");
+  });
+
+  it("returns EXCHANGE when the collection is missing entirely", () => {
+    const event = eventWith("x", "y");
+    delete event.singleValueExtendedProperties;
+    expect(resolveBookingSource(event)).toBe("EXCHANGE");
+  });
+
+  it("returns EXCHANGE for an unrecognised value rather than trusting it", () => {
+    expect(
+      resolveBookingSource(eventWith("x", "y", [{ id: SOURCE_PROP_ID, value: "SALAMANDER" }])),
+    ).toBe("EXCHANGE");
+  });
+
+  it("asks Graph for the Source property — without it everything reads EXCHANGE", () => {
+    expect(EVENT_QUERY_FIELDS).toContain(SOURCE_PROP_ID);
+  });
+});
+
+describe("syncMailbox provenance and duration reporting", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    configMock.SYNC_WINDOW_DAYS = 370;
+    dbMock.booking.findMany.mockResolvedValue([]);
+    dbMock.booking.findFirst.mockResolvedValue(null);
+    dbMock.booking.create.mockResolvedValue({});
+    dbMock.booking.update.mockResolvedValue({});
+    dbMock.booking.deleteMany.mockResolvedValue({ count: 0 });
+  });
+
+  async function sync(event: GraphEvent, roomKind = "STANDARD") {
+    graphMock.getCalendar.mockResolvedValue({ value: [event] });
+    await syncMailbox(
+      "std1@rooms.example.com",
+      "std1",
+      roomKind,
+      new Map([["std1@rooms.example.com", "std1"]]),
+      new Map(),
+    );
+    return dbMock.booking.create.mock.calls[0]?.[0]?.data;
+  }
+
+  // The times below are the real G17 case: one weekly lesson published as a
+  // single continuous event spanning the autumn term, which reads as the room
+  // being busy every hour of every day from September to December.
+  const TERM_BLOCK = eventWith("2026-09-14T11:35:00", "2026-12-14T13:35:00");
+
+  it("stamps a Salamander event EXCHANGE, not PORTAL", async () => {
+    const data = await sync(TERM_BLOCK);
+    expect(data.source).toBe("EXCHANGE");
+  });
+
+  it("keeps our own provenance when the Source property is present", async () => {
+    const data = await sync(
+      eventWith("2026-09-15T11:35:00", "2026-09-15T12:35:00", [
+        { id: SOURCE_PROP_ID, value: "IPAD_QR" },
+      ]),
+    );
+    expect(data.source).toBe("IPAD_QR");
+  });
+
+  it("corrects an already-mirrored row's source on update", async () => {
+    dbMock.booking.findMany.mockResolvedValue([{ id: "b1", graphICalUid: "uid-1" }]);
+    await sync(TERM_BLOCK);
+
+    expect(dbMock.booking.create).not.toHaveBeenCalled();
+    expect(dbMock.booking.update.mock.calls[0][0].data.source).toBe("EXCHANGE");
+  });
+
+  it("warns about a booking longer than the write path would ever create", async () => {
+    await sync(TERM_BLOCK);
+
+    const warn = loggerMock.warn.mock.calls.find(
+      (c: unknown[]) => c[1] === "graph: overlong_room_booking",
+    );
+    expect(warn).toBeDefined();
+    const context = warn![0] as { roomId: string; graphICalUid: string; hours: number };
+    expect(context).toMatchObject({ roomId: "std1", graphICalUid: "uid-1" });
+    expect(context.hours).toBeGreaterThan(2000);
+  });
+
+  it("still mirrors the overlong booking — reported, never filtered", async () => {
+    // Exchange is the source of truth: the room really is blocked, so the
+    // conflict check must keep seeing it. Dropping the row would hand out
+    // bookings Exchange then rejects.
+    const data = await sync(TERM_BLOCK);
+    expect(data.startUtc).toEqual(new Date("2026-09-14T11:35:00Z"));
+    expect(data.endUtc).toEqual(new Date("2026-12-14T13:35:00Z"));
+  });
+
+  it("says nothing about an ordinary lesson", async () => {
+    await sync(eventWith("2026-09-15T11:35:00", "2026-09-15T12:35:00"));
+
+    expect(
+      loggerMock.warn.mock.calls.some((c: unknown[]) => c[1] === "graph: overlong_room_booking"),
+    ).toBe(false);
+  });
+
+  it("says nothing about a multi-day MINIBUS hire", async () => {
+    await sync(eventWith("2026-09-14T07:00:00", "2026-09-17T18:00:00"), "MINIBUS");
+
+    expect(
+      loggerMock.warn.mock.calls.some((c: unknown[]) => c[1] === "graph: overlong_room_booking"),
+    ).toBe(false);
   });
 });

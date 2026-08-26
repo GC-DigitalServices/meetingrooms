@@ -1,7 +1,9 @@
+import type { BookingSource } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { getConfig } from "@/lib/config";
 import { graphClient } from "@/lib/graph/client";
 import type { GraphCalendarViewResponse, GraphEvent } from "@/lib/graph/types";
+import { isOverlongRoomBooking } from "@/lib/booking/duration";
 import { logger } from "@/lib/logger";
 
 // Extended property ID used to store the real organiser's UPN on Graph events.
@@ -9,12 +11,60 @@ import { logger } from "@/lib/logger";
 export const ORGANISER_UPN_PROP_ID =
   "String {00000000-0000-0000-0000-000000000001} Name OrganiserUpn";
 
+// Extended property ID recording which of our surfaces wrote the event.
+// Written by `createGraphEvent`; read back by `resolveBookingSource` below.
+// (Declared here rather than in events.ts so both readers and the writer share
+// one definition without events.ts and sync.ts importing each other.)
+export const SOURCE_PROP_ID =
+  "String {00000000-0000-0000-0000-000000000002} Name Source";
+
 // The $select/$expand shared by every event read, so the two call sites (this
 // resync and the webhook handler) cannot drift apart on which fields they ask
 // for. `type` distinguishes a series master from a single event or occurrence.
 export const EVENT_QUERY_FIELDS =
   `$select=id,iCalUId,subject,start,end,isAllDay,type,organizer,attendees,singleValueExtendedProperties` +
-  `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}')`;
+  `&$expand=singleValueExtendedProperties($filter=id eq '${ORGANISER_UPN_PROP_ID}' or id eq '${SOURCE_PROP_ID}')`;
+
+/**
+ * Which system wrote this event.
+ *
+ * Our own writes carry the Source extended property. An event without one was
+ * written directly to the room mailbox by something else — in practice
+ * Salamander (invariant 2), which is the only other writer. Everything synced
+ * used to be stamped PORTAL, which made "which bookings did we not write?"
+ * unanswerable; that question is what spotting bad MIS data needs.
+ */
+export function resolveBookingSource(event: GraphEvent): BookingSource {
+  const value = event.singleValueExtendedProperties?.find(
+    (p) => p.id === SOURCE_PROP_ID,
+  )?.value;
+  return value === "PORTAL" || value === "IPAD_QR" ? value : "EXCHANGE";
+}
+
+/**
+ * Logs a booking longer than the write path's own cap. See
+ * `isOverlongRoomBooking` — reported, never filtered.
+ */
+export function reportIfOverlong(
+  event: GraphEvent,
+  roomKind: string,
+  roomId: string,
+  startUtc: Date,
+  endUtc: Date,
+): void {
+  if (!isOverlongRoomBooking(roomKind, startUtc, endUtc)) return;
+  logger.warn(
+    {
+      roomId,
+      graphICalUid: event.iCalUId,
+      subject: event.subject,
+      start: startUtc.toISOString(),
+      end: endUtc.toISOString(),
+      hours: Math.round((endUtc.getTime() - startUtc.getTime()) / 3_600_000),
+    },
+    "graph: overlong_room_booking",
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Composite room resolution
@@ -88,6 +138,7 @@ export async function fetchSeriesOccurrences(
 export async function syncMailbox(
   mailboxUpn: string,
   fallbackRoomId: string,
+  roomKind: string,
   mailboxToRoomId: Map<string, string>,
   sectionToParentId: Map<string, string>,
 ): Promise<{ added: number; updated: number; removed: number }> {
@@ -155,9 +206,15 @@ export async function syncMailbox(
     );
     const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
 
-    // `source` is intentionally NOT part of `data`: setting it on update would
-    // clobber an existing booking's IPAD_QR provenance (this sync only reads the
-    // OrganiserUpn extended property, not Source). It is defaulted on create only.
+    const startUtc = new Date(event.start.dateTime + "Z");
+    const endUtc = new Date(event.end.dateTime + "Z");
+
+    reportIfOverlong(event, roomKind, logicalRoomId, startUtc, endUtc);
+
+    // `source` is part of `data`, so a resync corrects rows mirrored before the
+    // Source extended property was read back — including the ones mislabelled
+    // PORTAL. The property is authoritative for our own writes, so this cannot
+    // lose a booking's provenance.
     const data = {
       graphEventId: event.id,
       graphICalUid: event.iCalUId,
@@ -165,9 +222,10 @@ export async function syncMailbox(
       organiserUpn,
       organiserName,
       subject: event.subject,
-      startUtc: new Date(event.start.dateTime + "Z"),
-      endUtc: new Date(event.end.dateTime + "Z"),
+      startUtc,
+      endUtc,
       isAllDay: event.isAllDay,
+      source: resolveBookingSource(event),
       lastSyncedAt: new Date(),
     };
 
@@ -186,7 +244,7 @@ export async function syncMailbox(
         await db.booking.update({ where: { id: crossRoom.id }, data });
         updated++;
       } else {
-        await db.booking.create({ data: { ...data, source: "PORTAL" } });
+        await db.booking.create({ data });
         added++;
       }
     }
@@ -228,7 +286,13 @@ export async function fullResync(): Promise<void> {
   for (const room of rooms) {
     if (!room.mailboxUpn) continue;
     try {
-      const stats = await syncMailbox(room.mailboxUpn, room.id, mailboxToRoomId, sectionToParentId);
+      const stats = await syncMailbox(
+        room.mailboxUpn,
+        room.id,
+        room.kind,
+        mailboxToRoomId,
+        sectionToParentId,
+      );
       totalAdded += stats.added;
       totalUpdated += stats.updated;
       totalRemoved += stats.removed;

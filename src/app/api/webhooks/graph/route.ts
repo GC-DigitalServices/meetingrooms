@@ -2,7 +2,13 @@ import crypto from "crypto";
 import { db } from "@/lib/db/client";
 import { graphClient } from "@/lib/graph/client";
 import type { GraphEvent, GraphNotificationPayload } from "@/lib/graph/types";
-import { ORGANISER_UPN_PROP_ID, EVENT_QUERY_FIELDS, fetchSeriesOccurrences } from "@/lib/graph/sync";
+import {
+  ORGANISER_UPN_PROP_ID,
+  EVENT_QUERY_FIELDS,
+  fetchSeriesOccurrences,
+  resolveBookingSource,
+  reportIfOverlong,
+} from "@/lib/graph/sync";
 import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/realtime/rateLimit";
 import { apiError } from "@/lib/api/errors";
@@ -118,6 +124,7 @@ async function processNotifications(payload: GraphNotificationPayload): Promise<
             n.resourceData.id,
             room.mailboxUpn,
             sub.roomId,
+            room.kind,
             mailboxToRoomId,
             sectionToParentId
           );
@@ -148,6 +155,7 @@ async function handleCreatedOrUpdated(
   graphEventId: string,
   mailboxUpn: string,
   fallbackRoomId: string,
+  roomKind: string,
   mailboxToRoomId: Map<string, string>,
   sectionToParentId: Map<string, string>
 ): Promise<void> {
@@ -169,12 +177,12 @@ async function handleCreatedOrUpdated(
       "webhook: series_master_expanded"
     );
     for (const occurrence of occurrences) {
-      await mirrorEvent(occurrence, fallbackRoomId, mailboxToRoomId, sectionToParentId);
+      await mirrorEvent(occurrence, fallbackRoomId, roomKind, mailboxToRoomId, sectionToParentId);
     }
     return;
   }
 
-  await mirrorEvent(event, fallbackRoomId, mailboxToRoomId, sectionToParentId);
+  await mirrorEvent(event, fallbackRoomId, roomKind, mailboxToRoomId, sectionToParentId);
 }
 
 /**
@@ -187,6 +195,7 @@ async function handleCreatedOrUpdated(
 async function mirrorEvent(
   event: GraphEvent,
   fallbackRoomId: string,
+  roomKind: string,
   mailboxToRoomId: Map<string, string>,
   sectionToParentId: Map<string, string>
 ): Promise<void> {
@@ -219,8 +228,14 @@ async function mirrorEvent(
   );
   const organiserName = organiserAttendee?.emailAddress.name ?? event.organizer.emailAddress.name;
 
-  // `source` is set only on create (below); omitting it from the update path
-  // preserves the booking's original IPAD_QR/PORTAL provenance across re-syncs.
+  const startUtc = new Date(event.start.dateTime + "Z");
+  const endUtc = new Date(event.end.dateTime + "Z");
+
+  reportIfOverlong(event, roomKind, logicalRoomId, startUtc, endUtc);
+
+  // `source` comes from the Source extended property, which our own writes carry
+  // and Salamander's do not — so it is safe on the update path too, and a resync
+  // corrects rows mirrored before we read the property back.
   const data = {
     graphEventId: event.id,
     graphICalUid: event.iCalUId,
@@ -228,9 +243,10 @@ async function mirrorEvent(
     organiserUpn,
     organiserName,
     subject: event.subject,
-    startUtc: new Date(event.start.dateTime + "Z"),
-    endUtc: new Date(event.end.dateTime + "Z"),
+    startUtc,
+    endUtc,
     isAllDay: event.isAllDay,
+    source: resolveBookingSource(event),
     lastSyncedAt: new Date(),
   };
 
@@ -248,7 +264,7 @@ async function mirrorEvent(
   });
   const row = await db.booking.upsert({
     where: { graphICalUid: event.iCalUId },
-    create: { ...data, source: "PORTAL" },
+    create: data,
     update: data,
   });
   if (existing) {

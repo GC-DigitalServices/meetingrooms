@@ -1,9 +1,7 @@
 import { graphClient } from "@/lib/graph/client";
-import { ORGANISER_UPN_PROP_ID } from "@/lib/graph/sync";
+import { ORGANISER_UPN_PROP_ID, SOURCE_PROP_ID } from "@/lib/graph/sync";
 import type { GraphEvent } from "@/lib/graph/types";
 
-export const SOURCE_PROP_ID =
-  "String {00000000-0000-0000-0000-000000000002} Name Source";
 export const BOOKING_ID_PROP_ID =
   "String {00000000-0000-0000-0000-000000000003} Name BookingId";
 
