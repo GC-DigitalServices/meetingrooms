@@ -202,24 +202,36 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       ? computePremisesHash({ roomId: room.id, organiserUpn: input.organiserUpn, startUtc: start, endUtc: end, premisesNotes })
       : null;
 
-    const created = await db.booking.create({
-      data: {
-        graphEventId:      graphEvent.id,
-        graphICalUid:      graphEvent.iCalUId,
-        roomId:            bookingRoomId,
-        organiserUpn:      input.organiserUpn,
-        organiserName:     input.organiserName,
-        subject:           input.subject,
-        startUtc:          start,
-        endUtc:            end,
-        isAllDay:          false,
-        source:            "PORTAL",
-        premisesNotes,
-        premisesNotifyHash,
-        primaryMailboxUpn: primaryMbox,
-        lastSyncedAt:      new Date(),
-        recurringGroupId:  input.recurringGroupId ?? null,
-      },
+    const mirror = {
+      graphEventId:      graphEvent.id,
+      graphICalUid:      graphEvent.iCalUId,
+      roomId:            bookingRoomId,
+      organiserUpn:      input.organiserUpn,
+      organiserName:     input.organiserName,
+      subject:           input.subject,
+      startUtc:          start,
+      endUtc:            end,
+      isAllDay:          false,
+      source:            "PORTAL" as const,
+      premisesNotes,
+      premisesNotifyHash,
+      primaryMailboxUpn: primaryMbox,
+      lastSyncedAt:      new Date(),
+      recurringGroupId:  input.recurringGroupId ?? null,
+    };
+
+    // Upsert, not create: the room-mailbox webhook fires on our own Graph write
+    // and mirrorEvent can land the row first — most easily during a recurring
+    // series, where the loop is still writing later weeks when the notification
+    // for an earlier one arrives. A plain create then failed the graphICalUid /
+    // graphEventId unique constraints and the whole request 500'd, leaving the
+    // Exchange event orphaned. Our data is the fuller of the two (the webhook
+    // knows nothing of premisesNotes, primaryMailboxUpn or recurringGroupId),
+    // so it wins.
+    const created = await db.booking.upsert({
+      where:  { graphICalUid: graphEvent.iCalUId },
+      create: mirror,
+      update: mirror,
     });
 
     // Patch BookingId extended property now that we have the real id (fire-and-forget)
