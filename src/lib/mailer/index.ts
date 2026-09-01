@@ -19,6 +19,15 @@ export interface PremisesNotifyParams {
   premisesNotes: string | null;
   portalUrl: string;
   actorUpn: string;
+  /**
+   * Set for a weekly series: one email covers the whole run rather than one per
+   * occurrence. `startLocal`/`endLocal` stay the first occurrence's, so the
+   * subject still leads with a date. `skipped` lists the weeks that lost the
+   * conflict check and were never booked — premises need to know a date they
+   * might otherwise prepare for is not happening.
+   */
+  occurrences?: { startLocal: string; endLocal: string }[];
+  skipped?: string[];
 }
 
 function formatLocal(date: Date): string {
@@ -236,15 +245,35 @@ export async function sendPremisesNotification(params: PremisesNotifyParams): Pr
   }
 
   const isMinibus = params.roomKind === "MINIBUS";
-  const subject = isMinibus
-    ? `[${params.action}] Minibus booking: ${params.organiserName}, ${params.startLocal} → ${params.endLocal}`
-    : `[${params.action}] Room prep requested: ${params.roomDisplayName}, ${params.startLocal}`;
+  const what = isMinibus ? "Minibus" : "Room";
+  const occurrences = params.occurrences ?? [];
+  const isSeries = occurrences.length > 0;
+
+  const subject = isSeries
+    ? isMinibus
+      ? `[${params.action}] Minibus booking: ${params.organiserName}, ${occurrences.length} weekly bookings from ${params.startLocal}`
+      : `[${params.action}] Room prep requested: ${params.roomDisplayName}, ${occurrences.length} weekly bookings from ${params.startLocal}`
+    : isMinibus
+      ? `[${params.action}] Minibus booking: ${params.organiserName}, ${params.startLocal} → ${params.endLocal}`
+      : `[${params.action}] Room prep requested: ${params.roomDisplayName}, ${params.startLocal}`;
+
+  const whenLines = isSeries
+    ? [
+        `Weekly series: ${occurrences.length} booking${occurrences.length === 1 ? "" : "s"}`,
+        ...occurrences.map((o) => `  • ${o.startLocal} → ${o.endLocal}`),
+        ...(params.skipped?.length
+          ? [
+              `\nNot booked, the ${what.toLowerCase()} was already taken:`,
+              ...params.skipped.map((when) => `  • ${when}`),
+            ]
+          : []),
+      ]
+    : [`Start: ${params.startLocal}`, `End:   ${params.endLocal}`];
 
   const bodyLines = [
     `Organiser: ${params.organiserName}`,
-    `${isMinibus ? "Minibus" : "Room"}: ${params.roomDisplayName}`,
-    `Start: ${params.startLocal}`,
-    `End:   ${params.endLocal}`,
+    `${what}: ${params.roomDisplayName}`,
+    ...whenLines,
     ...(params.premisesNotes ? [`\nNotes: ${params.premisesNotes}`] : []),
     `\nView booking: ${params.portalUrl}/bookings/${params.bookingId}`,
   ];

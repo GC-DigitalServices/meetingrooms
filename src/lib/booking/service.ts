@@ -48,6 +48,11 @@ export interface CreateBookingInput {
   premisesNotes?: string | null;
   actor: ActorUser;
   recurringGroupId?: string;
+  /**
+   * Set by createRecurringBookings: the per-occurrence email is suppressed so
+   * the series can be reported once, with every date, after the loop.
+   */
+  deferPremisesNotify?: boolean;
 }
 
 export interface UpdateBookingInput {
@@ -255,7 +260,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     });
 
     // 8. Premises notification (best-effort, isolated)
-    if (shouldNotifyPremises(room.kind, premisesNotes)) {
+    if (shouldNotifyPremises(room.kind, premisesNotes) && !input.deferPremisesNotify) {
       const { PUBLIC_BASE_URL } = getConfig();
       await sendPremisesNotification({
         bookingId:       created.id,
@@ -541,9 +546,9 @@ export async function createRecurringBookings(
 
   // Check the last occurrence before writing anything — createBooking would
   // otherwise create the early weeks and then throw partway through the series.
-  const { kind } = await db.room.findUniqueOrThrow({
+  const { kind, displayName } = await db.room.findUniqueOrThrow({
     where: { id: input.roomId },
-    select: { kind: true },
+    select: { kind: true, displayName: true },
   });
   const lastStart = addLondonWeeks(input.start, input.repeatWeeks - 1);
   if (!isWithinBookingHorizon(input.actor.isAdmin, kind, lastStart)) {
@@ -560,12 +565,19 @@ export async function createRecurringBookings(
     const end   = addLondonWeeks(input.end, i);
 
     try {
-      const booking = await createBooking({ ...input, start, end, recurringGroupId: groupId });
+      const booking = await createBooking({
+        ...input,
+        start,
+        end,
+        recurringGroupId: groupId,
+        deferPremisesNotify: true,
+      });
       created.push(booking);
     } catch (err) {
       if (err instanceof ConflictError) {
         skipped.push(start);
       } else if (err instanceof GraphUnavailableError) {
+        await notifyPremisesOfSeries(input, kind, displayName, created, skipped);
         return { created, skipped, aborted: true };
       } else {
         throw err;
@@ -573,7 +585,48 @@ export async function createRecurringBookings(
     }
   }
 
+  await notifyPremisesOfSeries(input, kind, displayName, created, skipped);
   return { created, skipped, aborted: false };
+}
+
+/**
+ * One premises email for a whole weekly series, sent after the loop so it can
+ * list the dates that were actually booked and the ones that were skipped as
+ * conflicts. createBooking's per-occurrence email is deferred for this — ten
+ * near-identical emails for one series is how a real prep request gets missed.
+ *
+ * Best-effort, like every other premises notification: sendPremisesNotification
+ * swallows its own failures, and nothing here may unwind bookings already
+ * written to Exchange.
+ */
+async function notifyPremisesOfSeries(
+  input: CreateRecurringBookingInput,
+  roomKind: string,
+  roomDisplayName: string,
+  created: Booking[],
+  skipped: Date[]
+): Promise<void> {
+  const premisesNotes = input.premisesNotes ?? null;
+  if (!created.length || !shouldNotifyPremises(roomKind, premisesNotes)) return;
+
+  const { PUBLIC_BASE_URL } = getConfig();
+  await sendPremisesNotification({
+    bookingId:       created[0].id,
+    action:          "CREATE",
+    organiserName:   input.organiserName,
+    roomDisplayName,
+    roomKind,
+    startLocal:      formatLocal(created[0].startUtc),
+    endLocal:        formatLocal(created[0].endUtc),
+    occurrences:     created.map((b) => ({
+      startLocal: formatLocal(b.startUtc),
+      endLocal:   formatLocal(b.endUtc),
+    })),
+    skipped:         skipped.map(formatLocal),
+    premisesNotes,
+    portalUrl:       PUBLIC_BASE_URL,
+    actorUpn:        input.actor.upn,
+  });
 }
 
 export async function cancelRemainingRecurring(
